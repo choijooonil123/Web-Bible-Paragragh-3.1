@@ -2436,6 +2436,161 @@ document.querySelectorAll('.rte, #sermonBody, #b').forEach(ed=>{
 
 })();
 </script>
+
+<!-- ===== 📖 플로팅 툴바에 성경구절 삽입 기능 추가 ===== -->
+<script>
+(function(){
+  const bubble = document.getElementById('fmtBubble');
+  if(!bubble) return;
+
+  // === ① "구절" 버튼 추가 ===
+  const verseBtn = document.createElement('button');
+  verseBtn.className = 'fmt-btn';
+  verseBtn.dataset.act = 'verse-menu';
+  verseBtn.title = '성경구절 삽입';
+  verseBtn.textContent = '구절';
+  bubble.appendChild(verseBtn);
+
+  // === ② 서브메뉴 생성 ===
+  const verseMenu = document.createElement('div');
+  verseMenu.className = 'fmt-verse-menu hidden';
+  verseMenu.innerHTML = `
+    <button type="button" class="fmt-btn xxs" data-act="ins-current-all">본문절(전체)</button>
+    <button type="button" class="fmt-btn xxs" data-act="ins-current-pick">본문절(선택)</button>
+    <button type="button" class="fmt-btn xxs" data-act="ins-ref">직접입력</button>
+  `;
+  bubble.appendChild(verseMenu);
+
+  // === ③ 메뉴 열기/닫기 ===
+  verseBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    verseMenu.classList.toggle('hidden');
+  });
+  document.addEventListener('click', ()=>{
+    verseMenu.classList.add('hidden');
+  });
+
+  // === ④ 클릭 시 동작 ===
+  bubble.addEventListener('click', async (ev)=>{
+    const act = ev.target && ev.target.dataset ? ev.target.dataset.act : '';
+    if(!act) return;
+
+    if(act === 'ins-current-all'){
+      const html = buildCurrentParaVersesHTML();
+      if(!html){ alert('현재 단락의 본문절이 없습니다.'); return; }
+      insertHTMLAtSelection(html);
+      hideFmtBubble();
+    }
+
+    if(act === 'ins-current-pick'){
+      const q = prompt('삽입할 절 (예: 1-3,5,8)');
+      if(!q) return;
+      const html = buildCurrentParaPickedHTML(q);
+      if(!html){ alert('선택한 절을 찾을 수 없습니다.'); return; }
+      insertHTMLAtSelection(html);
+      hideFmtBubble();
+    }
+
+    if(act === 'ins-ref'){
+      const raw = prompt('삽입할 성경구절 (예: 창 1:1-3, 요3:16)');
+      if(!raw) return;
+      const html = await buildReferenceVersesHTML(raw);
+      if(!html){ alert('해당 구절을 찾을 수 없습니다.'); return; }
+      insertHTMLAtSelection(html);
+      hideFmtBubble();
+    }
+  });
+
+  // === ⑤ 메뉴용 CSS 추가 ===
+  const css = document.createElement('style');
+  css.textContent = `
+    .fmt-verse-menu{
+      position:absolute; left:6px; top:100%;
+      margin-top:6px; padding:4px;
+      background:#11151b; border:1px solid #2a3040;
+      border-radius:8px; box-shadow:0 8px 18px rgba(0,0,0,.35);
+      z-index:9999;
+    }
+    .fmt-verse-menu.hidden{ display:none }
+    .fmt-btn.xxs{
+      font-size:11px; line-height:1; padding:5px 6px;
+      margin:2px; border-radius:6px;
+    }
+  `;
+  document.head.appendChild(css);
+
+  // === ⑥ 유틸 함수들 ===
+  function getActiveEditable(){
+    const sel = window.getSelection();
+    if(!sel || sel.rangeCount===0) return null;
+    const node = sel.getRangeAt(0).commonAncestorContainer;
+    const el = node.nodeType===3 ? node.parentElement : node;
+    return el && el.closest && el.closest('[contenteditable="true"]');
+  }
+
+  function insertHTMLAtSelection(html){
+    const ed = getActiveEditable();
+    if(!ed){ alert('편집 영역을 찾을 수 없습니다.'); return; }
+    ed.focus();
+    document.execCommand('insertHTML', false, html);
+  }
+
+  function buildCurrentParaVersesHTML(){
+    try{
+      const para = BIBLE?.books?.[CURRENT.book]?.[CURRENT.chap]?.paras?.[CURRENT.paraIdx];
+      const verses = Array.isArray(para?.verses) ? para.verses : [];
+      if(!verses.length) return '';
+      return verses.map(([v,t])=>`<div class="verse-line"><sup>${v}</sup>${t}</div>`).join('');
+    }catch(_){ return ''; }
+  }
+
+  function parseVersePick(q){
+    const set=new Set();
+    String(q).split(',').map(x=>x.trim()).forEach(tok=>{
+      const m=tok.match(/^(\d+)\s*-\s*(\d+)$/);
+      if(m){ let a=+m[1], b=+m[2]; if(a>b)[a,b]=[b,a]; for(let i=a;i<=b;i++) set.add(i); }
+      else { const v=+tok; if(!isNaN(v)) set.add(v); }
+    });
+    return set;
+  }
+
+  function buildCurrentParaPickedHTML(q){
+    try{
+      const para = BIBLE?.books?.[CURRENT.book]?.[CURRENT.chap]?.paras?.[CURRENT.paraIdx];
+      const verses = Array.isArray(para?.verses) ? para.verses : [];
+      const set = parseVersePick(q);
+      const picked = verses.filter(([v])=> set.has(+v));
+      return picked.map(([v,t])=>`<div class="verse-line"><sup>${v}</sup>${t}</div>`).join('');
+    }catch(_){ return ''; }
+  }
+
+  async function buildReferenceVersesHTML(raw){
+    const norm=String(raw).replace(/\s+/g,' ').replace(/[–—－]/g,'-').replace(/[：]/g,':').trim();
+    const m=norm.match(/^(.+?)\s+(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?$/);
+    if(!m) return '';
+
+    const bookRaw=m[1], chap=parseInt(m[2],10);
+    const vFrom=parseInt(m[3],10), vTo=m[4]?parseInt(m[4],10):vFrom;
+
+    const books = BIBLE?.books;
+    if(!books) return '';
+
+    const bookKey = resolveBookKey(bookRaw, books);
+    if(!bookKey) return '';
+
+    const ch = books[bookKey]?.[chap];
+    if(!ch) return '';
+
+    const verses = (ch.paras||[]).flatMap(p=>p.verses||[]).filter(([v])=> v>=vFrom && v<=vTo);
+    if(!verses.length) return '';
+
+    const header = `<div class="verse-header"><b>${bookKey} ${chap}:${vFrom}${vTo!==vFrom?'-'+vTo:''}</b></div>`;
+    const body   = verses.map(([v,t])=>`<div class="verse-line"><sup>${v}</sup>${t}</div>`).join('');
+    return header + body;
+  }
+
+})();
+</script>
   
 </body>
 </html>
