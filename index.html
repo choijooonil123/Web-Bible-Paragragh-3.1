@@ -1391,6 +1391,9 @@ main{
   <button class="danger" id="d">삭제</button>
   <button class="primary" id="s">저장</button>
 </footer>
+
+
+
 </body></html>`;
 
   w.document.open(); w.document.write(popupHTML); w.document.close();
@@ -2097,6 +2100,174 @@ document.querySelectorAll('.rte, #sermonBody, #b').forEach(ed=>{
   <button data-cmd="underline" title="밑줄(U)"><u>U</u></button>
   <input type="color" id="textColor" title="글자색" />
 </div>
+
+<!-- ===== Floating Format Bubble (공용) ===== -->
+<style>
+  #fmtBubble{
+    position: fixed; inset:auto auto 0 0; transform: translate(-50%, -8px);
+    background: #161922; border:1px solid #252a36; border-radius: 10px;
+    display: none; gap: 6px; align-items: center; padding: 6px 8px; z-index: 9999;
+    box-shadow: 0 6px 16px rgba(0,0,0,.35);
+  }
+  #fmtBubble button{
+    background: transparent; color:#e6e8ef; border:1px solid #2a3040;
+    border-radius:8px; padding:4px 8px; cursor:pointer;
+  }
+  #fmtBubble button:hover{ border-color:#6ea8fe }
+  #fmtBubble .sep{ width:1px; height:18px; background:#252a36; margin:0 2px }
+  #fmtBubble input[type="color"]{ width:28px; height:24px; padding:0; border:1px solid #2a3040; border-radius:6px; background:transparent }
+</style>
+
+<div id="fmtBubble" role="toolbar" aria-hidden="true">
+  <button type="button" data-cmd="toggleList" title="전환(글머리표→번호→해제)">전환</button>
+  <span class="sep"></span>
+  <button type="button" data-cmd="bold" title="굵게">B</button>
+  <button type="button" data-cmd="italic" title="기울임">I</button>
+  <button type="button" data-cmd="underline" title="밑줄">U</button>
+  <button type="button" data-cmd="strikeThrough" title="취소선">S</button>
+  <span class="sep"></span>
+  <button type="button" data-cmd="link" title="링크">링크</button>
+  <label style="display:inline-flex;align-items:center;gap:6px">
+    <input id="fmtColorWell" type="color" value="#ffffff" title="텍스트 색상" />
+  </label>
+</div>
+
+<script>
+(function(){
+  // 대상: 모든 .rte(contenteditable) 편집기 (모달/팝업 공용)
+  const BUBBLE = document.getElementById('fmtBubble');
+  const COLOR  = document.getElementById('fmtColorWell');
+  let lastRange = null;       // 선택 범위 보존
+  let anchorIn  = null;       // 선택이 포함된 편집기(.rte)
+
+  // 유틸
+  const isRTE = node => {
+    if(!node) return false;
+    if(node.nodeType===1 && node.classList?.contains('rte')) return true;
+    return node.parentNode ? isRTE(node.parentNode) : false;
+  };
+  function getSelectionInRTE(){
+    const sel = window.getSelection();
+    if(!sel || sel.rangeCount===0) return null;
+    const r = sel.getRangeAt(0);
+    const root = r.commonAncestorContainer;
+    return isRTE(root) ? r : null;
+  }
+  function saveSelection(){
+    const sel = window.getSelection();
+    if(!sel || sel.rangeCount===0) return;
+    lastRange = sel.getRangeAt(0).cloneRange();
+  }
+  function restoreSelection(){
+    if(!lastRange) return;
+    const sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(lastRange);
+  }
+  function rectCenter(rect){ return { x: rect.left + rect.width/2, y: rect.top }; }
+
+  function positionBubble(range){
+    const r = range.getBoundingClientRect();
+    const {x,y} = rectCenter(r);
+    BUBBLE.style.left = x + 'px';
+    BUBBLE.style.top  = (y - 12) + 'px';
+  }
+  function showBubble(range){
+    BUBBLE.style.display = 'flex';
+    BUBBLE.setAttribute('aria-hidden','false');
+    positionBubble(range);
+  }
+  function hideBubble(){
+    BUBBLE.style.display = 'none';
+    BUBBLE.setAttribute('aria-hidden','true');
+  }
+
+  // 선택 변화에 반응
+  document.addEventListener('selectionchange', ()=>{
+    const r = getSelectionInRTE();
+    if(!r || r.collapsed){ hideBubble(); return; }
+    // 현재 편집기 기억
+    const root = r.commonAncestorContainer;
+    anchorIn = (root.nodeType===1 ? root : root.parentNode);
+    while(anchorIn && !anchorIn.classList?.contains('rte')) anchorIn = anchorIn.parentNode;
+    if(!anchorIn) { hideBubble(); return; }
+
+    saveSelection();
+    showBubble(r);
+  });
+
+  // 스크롤/리사이즈 시 재배치(보이는 중일 때만)
+  ['scroll','resize'].forEach(ev=>{
+    window.addEventListener(ev, ()=>{
+      if(BUBBLE.style.display==='none' || !lastRange) return;
+      try{ positionBubble(lastRange); }catch(_){}
+    }, true);
+  });
+
+  // 툴바 동작
+  BUBBLE.addEventListener('mousedown', e => e.preventDefault()); // 포커스가 선택에서 벗어나지 않게
+  BUBBLE.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    const cmd = btn.dataset.cmd;
+    restoreSelection(); // 클릭 전에 저장된 선택 복구
+
+    // execCommand는 "굵게 시 노랑색 X" 그대로 순수 적용
+    if(cmd === 'bold' || cmd === 'italic' || cmd === 'underline' || cmd === 'strikeThrough'){
+      document.execCommand(cmd, false, null);
+      saveSelection();
+      return;
+    }
+
+    if(cmd === 'toggleList'){
+      // 순환: 없음 -> UL -> OL -> 없음
+      const selNode = window.getSelection().anchorNode;
+      const li = selNode && (selNode.closest ? selNode.closest('li') : null);
+      const inUL = li && li.parentNode && li.parentNode.tagName === 'UL';
+      const inOL = li && li.parentNode && li.parentNode.tagName === 'OL';
+      if(!inUL && !inOL){
+        document.execCommand('insertUnorderedList', false, null);
+      }else if(inUL){
+        document.execCommand('insertOrderedList', false, null);
+      }else{
+        // inOL
+        document.execCommand('insertOrderedList', false, null); // 한 번 더로 해제
+      }
+      saveSelection();
+      return;
+    }
+
+    if(cmd === 'link'){
+      const sel = window.getSelection();
+      const hasLink = !!(sel.anchorNode && (sel.anchorNode.parentElement?.closest('a')));
+      let url = prompt(hasLink ? '링크 주소를 수정하세요:' : '링크 주소를 입력하세요 (http/https):', 'https://');
+      if(url === null) return; // 취소
+      url = url.trim();
+      if(url===''){ document.execCommand('unlink'); saveSelection(); return; }
+      if(!/^https?:\/\//i.test(url)) url = 'https://' + url;
+      document.execCommand('createLink', false, url);
+      saveSelection();
+      return;
+    }
+  });
+
+  // 색상 즉시 적용
+  COLOR.addEventListener('input', ()=>{
+    restoreSelection();
+    document.execCommand('foreColor', false, COLOR.value || '#ffffff');
+    saveSelection();
+  });
+
+  // 에스케이프/클릭바깥으로 닫기
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') hideBubble(); });
+  document.addEventListener('mousedown', (e)=>{
+    if(BUBBLE.contains(e.target)) return;
+    const r = getSelectionInRTE();
+    if(!r || r.collapsed) hideBubble();
+  });
+
+})();
+</script>
+<!-- ===== /Floating Format Bubble ===== -->
   
 </body>
 </html>
