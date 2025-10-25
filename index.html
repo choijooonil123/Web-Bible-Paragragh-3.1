@@ -187,6 +187,11 @@
   color: #8df59b;
   margin: 0.4em 0 0.2em;
 }
+
+  /* ===== 상단 제목줄(단위성경속 맥락 — …) 숨기기 ===== */
+  #modalRef, #ref {
+    display: none !important;
+  }
     
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Nanum+Myeongjo&display=swap" rel="stylesheet">
@@ -238,7 +243,6 @@
     <div class="modal">
       <div class="head">
         <strong id="modalTitle">단락 성경</strong>
-        <span class="muted" id="modalRef">—</span>
         <div class="grow"></div>
         <button id="closeModal">닫기</button>
       </div>
@@ -823,7 +827,7 @@
       if(!CURRENT.paraId){ const openPara = treeEl.querySelector('details.para[open]'); if(!openPara) return; }
       const para = BIBLE.books[CURRENT.book][CURRENT.chap].paras[CURRENT.paraIdx];
       // 예: 창세기 1장 · 태초(1–5) — 맥락과 주석 기반 설교
-      modalRef.textContent = `${CURRENT.book} ${CURRENT.chap}장 · ${para.title || para.ref} (${para.ref}) — 맥락과 주석 기반 설교`;
+      // modalRef.textContent = `${CURRENT.book} ${CURRENT.chap}장 · ${para.title || para.ref} (${para.ref}) — 맥락과 주석 기반 설교`;
 
       renderSermonList();
       sermonEditor.style.display = 'none';
@@ -1315,7 +1319,7 @@ main{
 </head>
 <body class="context-editor">
 <header>
-  <strong>설교 편집</strong><span class="muted" id="ref"></span>
+  <strong>설교 편집</strong>
   <div class="grow"></div>
   <button id="x">닫기</button>
 </header>
