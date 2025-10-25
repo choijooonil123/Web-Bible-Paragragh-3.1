@@ -200,6 +200,11 @@
 .grow { flex: 1 1 auto; }                  /* 빈 공간 확보해서 오른쪽으로 밀기 */
 .editor-bar { display: flex; align-items: center; gap: 8px; }  /* 한 줄 정렬 */
 
+.btnSummaryChap { 
+  font-size: 0.8rem; 
+  padding: 2px 6px; 
+}
+
 </style>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Nanum+Myeongjo&display=swap" rel="stylesheet">
 </head>
@@ -541,19 +546,19 @@
         const chWrap = document.createElement('div'); chWrap.className='chapters';
         const chapters = Object.keys(BIBLE.books[bookName]).map(n=>parseInt(n,10)).sort((a,b)=>a-b);
 
-        for(const ch of chapters){
+        for (const ch of chapters) {
           const detChap = document.createElement('details');
           const sumChap = document.createElement('summary');
-          sumChap.innerHTML = `<span class="chip">${ch}장</span>`;
-          detChap.appendChild(sumChap);
-
-          /* ✅ 여기 추가: 장 요약 버튼 */
-          const chapToolbar = document.createElement('div');
-          chapToolbar.className = 'ptoolbar';
-          chapToolbar.innerHTML = `
-            <button class="ctxBtn btnSummaryChap">내용요약</button>
+        
+          // ✅ 장 옆에 내용요약 버튼 배치
+          sumChap.innerHTML = `
+            <span class="chip">${ch}장</span>
+            <button class="ctxBtn btnSummaryChap" 
+                    data-book="${escapeHtml(bookName)}" 
+                    data-chap="${ch}" 
+                    style="margin-left:6px;">내용요약</button>
           `;
-          detChap.appendChild(chapToolbar);
+          detChap.appendChild(sumChap);
 
           const parWrap = document.createElement('div'); 
           parWrap.className='paras';
@@ -657,6 +662,31 @@
         treeEl.appendChild(detBook);
       }
     }
+
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.btnSummaryChap');
+      if (!btn) return;
+    
+      const book = btn.dataset.book;
+      const chap = parseInt(btn.dataset.chap, 10);
+    
+      // ✅ 1) 해당 장의 첫 단락 정보 확인
+      const chapData = BIBLE.books?.[book]?.[chap];
+      if (!chapData || !chapData.paras || chapData.paras.length === 0) {
+        alert(`${book} ${chap}장은 내용이 없습니다.`);
+        return;
+      }
+    
+      const firstPara = chapData.paras[0];
+      CURRENT.book = book;
+      CURRENT.chap = chap;
+      CURRENT.paraIdx = 0;
+      CURRENT.paraId = `${book}|${chap}|${firstPara.ref || '1:1'}`;
+    
+      // ✅ 2) 이미 존재하는 단락 요약 편집기 재사용
+      openSingleDocEditor('summary');
+    });
+
 
     /* --------- Inline TTS --------- */
     function buildQueueFrom(book, chap, idx){
