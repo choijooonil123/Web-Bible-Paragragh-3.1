@@ -539,19 +539,16 @@
         const chWrap = document.createElement('div'); chWrap.className='chapters';
         const chapters = Object.keys(BIBLE.books[bookName]).map(n=>parseInt(n,10)).sort((a,b)=>a-b);
 
-        for(const ch of chapters){
+        for (const ch of chapters) {
           const detChap = document.createElement('details');
           const sumChap = document.createElement('summary');
-          sumChap.innerHTML = `<span class="chip">${ch}장</span>`;
-          detChap.appendChild(sumChap);
         
-          /* ✅ 여기 추가: 장 요약 버튼 */
-          const chapToolbar = document.createElement('div');
-          chapToolbar.className = 'ptoolbar';
-          chapToolbar.innerHTML = `
-            <button class="ctxBtn btnSummaryChap">내용요약</button>
+          // ✅ 장 제목(칩) + 내용요약 버튼을 summary 안에 같이 배치
+          sumChap.innerHTML = `
+            <span class="chip">${ch}장</span>
+            <button class="ctxBtn btnSummaryChap" data-book="${bookName}" data-chap="${ch}" style="margin-left:6px">내용요약</button>
           `;
-          detChap.appendChild(chapToolbar);
+          detChap.appendChild(sumChap);
         
           const parWrap = document.createElement('div'); 
           parWrap.className='paras';
