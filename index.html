@@ -2103,55 +2103,56 @@ document.querySelectorAll('.rte, #sermonBody, #b').forEach(ed=>{
 
 <!-- ===== Floating Format Bubble (공용) ===== -->
 <style>
-  /* ===== Ultra-Compact Floating Format Bubble ===== */
+  /* ===== Medium Floating Format Bubble (2× size of Ultra-Compact) ===== */
   #fmtBubble {
     position: fixed;
-    transform: translate(-50%, -5px);
-    background: rgba(22,25,34,0.9);
+    transform: translate(-50%, -8px);
+    background: rgba(22,25,34,0.92);
     border: 1px solid #2b3040;
-    border-radius: 5px;
+    border-radius: 8px;
     display: none;
-    gap: 3px;
+    gap: 6px;
     align-items: center;
-    padding: 2px 3px;
+    padding: 5px 8px;
     z-index: 9999;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.25);
-    backdrop-filter: blur(4px);
-    height: 24px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+    backdrop-filter: blur(6px);
+    height: 38px;
   }
   #fmtBubble button {
     background: transparent;
     color: #e6e8ef;
     border: none;
-    border-radius: 3px;
-    padding: 1px 3px;
+    border-radius: 5px;
+    padding: 4px 8px;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 14px;
     line-height: 1;
     font-weight: 600;
-    opacity: 0.8;
+    opacity: 0.9;
     user-select: none;
   }
   #fmtBubble button:hover {
-    background: rgba(110,168,254,0.15);
+    background: rgba(110,168,254,0.18);
     color: #9fd0ff;
     opacity: 1;
   }
   #fmtBubble .sep {
     width: 1px;
-    height: 12px;
+    height: 18px;
     background: #2a2f3d;
-    margin: 0 1px;
+    margin: 0 2px;
   }
   #fmtBubble input[type="color"] {
-    width: 16px;
-    height: 16px;
+    width: 28px;
+    height: 24px;
     border: none;
-    border-radius: 3px;
+    border-radius: 4px;
     padding: 0;
     cursor: pointer;
     background: transparent;
   }
+
 </style>
 
 <div id="fmtBubble" role="toolbar" aria-hidden="true">
