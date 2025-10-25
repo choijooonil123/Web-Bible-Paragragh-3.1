@@ -195,7 +195,10 @@
 }
 
 */
-    
+
+.grow { flex: 1 1 auto; }                  /* 빈 공간 확보해서 오른쪽으로 밀기 */
+.editor-bar { display: flex; align-items: center; gap: 8px; }  /* 한 줄 정렬 */
+
 </style>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Nanum+Myeongjo&display=swap" rel="stylesheet">
 </head>
@@ -541,8 +544,18 @@
           const sumChap = document.createElement('summary');
           sumChap.innerHTML = `<span class="chip">${ch}장</span>`;
           detChap.appendChild(sumChap);
+        
+          /* ✅ 여기 추가: 장 요약 버튼 */
+          const chapToolbar = document.createElement('div');
+          chapToolbar.className = 'ptoolbar';
+          chapToolbar.innerHTML = `
+            <button class="ctxBtn btnSummaryChap">내용요약</button>
+          `;
+          detChap.appendChild(chapToolbar);
+        
+          const parWrap = document.createElement('div'); 
+          parWrap.className='paras';
 
-          const parWrap = document.createElement('div'); parWrap.className='paras';
           const paras = BIBLE.books[bookName][ch].paras || [];
           paras.forEach((p, idx)=>{
             const detPara = document.createElement('details'); detPara.className='para';
@@ -589,10 +602,10 @@
               <div class="ptoolbar">
                 <button class="primary speakBtn">낭독</button>
                 <label class="chip"><input type="checkbox" class="keepReading" style="margin-right:6px">계속 낭독</label>
+                <button class="ctxBtn btnSummary">내용요약</button>
                 <button class="ctxBtn btnUnitCtx">단위성경속 맥락</button>
                 <button class="ctxBtn btnWholeCtx">전체성경속 맥락</button>
                 <button class="ctxBtn btnCommentary">주석</button>
-                <button class="ctxBtn btnSummary">내용요약</button>
                 <div class="spacer"></div>
                 <button class="sermBtn">설교</button>
               </div>
@@ -863,8 +876,8 @@
 
       const map = getDocMap(key);
       const doc = map[pid] || {
-        title: `${titlePrefix} — ${para.title||para.ref}`,
-        body:  (kind==='summary' ? '핵심 내용을 간결하게 요약해 적어주세요.' : ''),
+        // title: `${titlePrefix} — ${para.title||para.ref}`,
+        body:  (kind==='summary' ? '' : ''),
         images: [], date:''
       };
 
