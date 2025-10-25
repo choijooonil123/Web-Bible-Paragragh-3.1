@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Web Bible Paragraph-3.1</title>
+  <title>Web Bible – Paragraph Sermon (Final Slim)</title>
   <style>
     :root{
       --bg:#0f1115; --panel:#161922; --text:#e6e8ef; --muted:#9aa0ab;
@@ -84,6 +84,8 @@
     .editor textarea{ min-height:360px; resize:vertical }
     .thumbs{ display:flex; gap:8px; flex-wrap:wrap }
     .thumbs img{ width:112px; height:112px; object-fit:cover; border-radius:10px; border:1px solid var(--border) }
+    .editor-bar{ display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+    .editor-bar .grow{ flex:1 1 auto }
 
     /* [맥락 편집기 전용] 보기 좋은 타이포/레이아웃 */
     .context-editor {
@@ -163,6 +165,54 @@
   min-height:0;
   overflow:auto;                 /* 본문만 스크롤 */
 }
+/* 모달 RTE 툴바 고정 */
+#rteToolbar{
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+    /* 모달 편집기 도구 접기 */
+#modalControlsWrap{
+  overflow:hidden;
+  transition:max-height .25s ease, opacity .25s ease;
+  max-height:600px; opacity:1;
+}
+#modalControlsWrap.collapsed{ max-height:0; opacity:0 }
+#modalToggleControlsBtn{ min-width:96px }
+
+/* ===== 인라인 툴바 ===== */
+.inline-toolbar {
+  position: absolute;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 6px;
+  display: flex;
+  gap: 6px;
+  z-index: 9999;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  transition: opacity 0.2s;
+}
+.inline-toolbar button {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+}
+.inline-toolbar button:hover { color: var(--accent); }
+.inline-toolbar input[type="color"] {
+  width: 24px;
+  height: 24px;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: none;
+}
 
 /* ===== Heading 스타일 구분 ===== */
 .rte h1 {
@@ -188,11 +238,6 @@
   margin: 0.4em 0 0.2em;
 }
 
-  /* ===== 상단 제목줄(단위성경속 맥락 — …) 숨기기 ===== */
-  #modalRef, #ref {
-    display: none !important;
-  }
-    
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Nanum+Myeongjo&display=swap" rel="stylesheet">
 </head>
@@ -243,6 +288,7 @@
     <div class="modal">
       <div class="head">
         <strong id="modalTitle">단락 성경</strong>
+        <span class="muted" id="modalRef">—</span>
         <div class="grow"></div>
         <button id="closeModal">닫기</button>
       </div>
@@ -252,6 +298,17 @@
       <div class="editor" id="sermonEditor" style="display:none">
        <div id="modalControlsWrap">
         <input type="text" id="sermonTitle" placeholder="제목" />
+        <div id="rteToolbar" class="editor-bar" style="gap:6px; flex-wrap:wrap; margin-top:-4px;">
+          <button type="button" id="rteBold"><b>굵게</b> (Alt+B)</button>
+          <button type="button" id="rteItalic"><i>기울임</i> (Alt+I)</button>
+          <button type="button" id="rteUnderline"><u>밑줄</u> (Alt+U)</button>
+          <label class="pill" style="display:inline-flex;align-items:center;gap:6px">
+            <span class="muted">글자색</span>
+            <input id="rteColor" type="color" value="#ffffff" style="width:32px;height:28px;padding:0;border-radius:8px">
+            <button type="button" id="rteApplyColor">적용 (Alt+C)</button>
+          </label>
+         </div>
+        </div>
        </div>
         <!-- 🔼🔼🔼 추가 끝 -->
 
@@ -827,7 +884,7 @@
       if(!CURRENT.paraId){ const openPara = treeEl.querySelector('details.para[open]'); if(!openPara) return; }
       const para = BIBLE.books[CURRENT.book][CURRENT.chap].paras[CURRENT.paraIdx];
       // 예: 창세기 1장 · 태초(1–5) — 맥락과 주석 기반 설교
-      // modalRef.textContent = `${CURRENT.book} ${CURRENT.chap}장 · ${para.title || para.ref} (${para.ref}) — 맥락과 주석 기반 설교`;
+      modalRef.textContent = `${CURRENT.book} ${CURRENT.chap}장 · ${para.title || para.ref} (${para.ref}) — 맥락과 주석 기반 설교`;
 
       renderSermonList();
       sermonEditor.style.display = 'none';
@@ -1319,7 +1376,7 @@ main{
 </head>
 <body class="context-editor">
 <header>
-  <strong>설교 편집</strong>
+  <strong>설교 편집</strong><span class="muted" id="ref"></span>
   <div class="grow"></div>
   <button id="x">닫기</button>
 </header>
@@ -1425,7 +1482,7 @@ if (printBtn) {
 }
 
 
-    
+
   });
 
   // 🔹 낭독 / 중지
@@ -1794,6 +1851,15 @@ if (printBtn) {
   window.addEventListener('message', onMsg);
 }
 
+    // RTE 툴바 버튼 (모달 전용)
+    document.getElementById('rteBold')?.addEventListener('click', ()=> execFmt('bold'));
+    document.getElementById('rteItalic')?.addEventListener('click', ()=> execFmt('italic'));
+    document.getElementById('rteUnderline')?.addEventListener('click', ()=> execFmt('underline'));
+    document.getElementById('rteApplyColor')?.addEventListener('click', ()=>{
+      const hex = (document.getElementById('rteColor')?.value) || '#ffffff';
+      applyColorImmediateToRTE(hex);
+    });
+
     // Alt 단축키 (내용요약/단위/전체/주석 모달의 RTE 전용)
     window.addEventListener('keydown', (e)=>{
       // 모달이 떠 있고, 모달 편집기가 보일 때만
@@ -1889,6 +1955,129 @@ if (printBtn) {
       document.execCommand('foreColor', false, c);
     });
 
+// ---------- 붙여넣을 때 굵은 글자에 노랑색 자동 적용 ----------
+document.addEventListener('paste', (e) => {
+  // 현재 커서가 contenteditable 편집기 안이 아닐 경우 무시
+  const editor = document.activeElement;
+  if (!editor || !editor.isContentEditable) return;
+
+  e.preventDefault(); // 기본 붙여넣기 막기
+
+  // 클립보드에서 HTML 또는 텍스트 가져오기
+  const pasteHTML =
+    (e.clipboardData || window.clipboardData).getData('text/html') ||
+    (e.clipboardData || window.clipboardData).getData('text/plain');
+
+  if (!pasteHTML) return;
+
+  // <b>, <strong> 태그에 스타일(color + font-weight) 추가
+  const styledHTML = pasteHTML
+    .replace(/<b(.*?)>/gi, `<b style="color:#ffd86b;font-weight:700;"$1>`)
+    .replace(/<strong(.*?)>/gi, `<strong style="color:#ffd86b;font-weight:700;"$1>`);
+
+  // 현재 커서 위치에 HTML 삽입
+  if (document.queryCommandSupported('insertHTML')) {
+    document.execCommand('insertHTML', false, styledHTML);
+  } else {
+    editor.innerHTML += styledHTML;
+  }
+});
+
+    // == 모달 편집기 도구 접기/펼치기 ==
+(function(){
+  const btn  = document.getElementById('modalToggleControlsBtn');
+  const wrap = document.getElementById('modalControlsWrap');
+  if(!btn || !wrap) return;
+
+  const showBtnIfEditorVisible = ()=>{
+    const editing = sermonEditor.style.display !== 'none';
+    btn.style.display = editing ? '' : 'none';
+
+    if(editing){
+      const para = BIBLE?.books?.[CURRENT.book]?.[CURRENT.chap]?.paras?.[CURRENT.paraIdx];
+      const pid  = para ? `${CURRENT.book}|${CURRENT.chap}|${para.ref}` : '';
+      const KEY  = `wbps.modal.controls.collapsed:${pid}`;
+      
+      const raw = localStorage.getItem(KEY);
+      // 저장값 없으면 기본=접힘(true)
+      const collapsed = (raw === null) ? true : (raw === '1');
+      wrap.classList.toggle('collapsed', collapsed);
+      btn.textContent = collapsed ? '편집하기' : '도구 닫기';
+      
+      btn.onclick = ()=>{
+        const c = wrap.classList.toggle('collapsed');
+        btn.textContent = c ? '편집하기' : '도구 닫기';
+        localStorage.setItem(KEY, c ? '1' : '0');
+      };
+      
+    }
+  };
+
+  // 에디터 진입 지점에 후킹
+  const _openSingleDocEditor = openSingleDocEditor;
+  openSingleDocEditor = function(kind){
+    _openSingleDocEditor(kind);
+    setTimeout(showBtnIfEditorVisible, 0);
+  };
+  const _startNewSermon = startNewSermon;
+  startNewSermon = function(){
+    _startNewSermon();
+    setTimeout(showBtnIfEditorVisible, 0);
+  };
+  const _editSermon = editSermon;
+  editSermon = function(idx){
+    _editSermon(idx);
+    setTimeout(showBtnIfEditorVisible, 0);
+  };
+})();
+
+  // ===== 선택 시 자동 등장하는 인라인 툴바 =====
+(function(){
+  const toolbar = document.getElementById('inlineToolbar');
+  const colorInput = document.getElementById('textColor');
+  if(!toolbar) return;
+
+  // 버튼 동작
+  toolbar.addEventListener('click', (e) => {
+    const cmd = e.target.dataset.cmd;
+    if (!cmd) return;
+    e.preventDefault();
+    document.execCommand(cmd, false, null);
+    hideToolbar();
+  });
+
+  // 색상 선택
+  colorInput.addEventListener('input', () => {
+    document.execCommand('foreColor', false, colorInput.value);
+    hideToolbar();
+  });
+
+  // 마우스로 글자 선택 시 툴바 표시
+  document.addEventListener('mouseup', (e) => {
+    const sel = window.getSelection();
+    if (!sel.rangeCount || sel.isCollapsed) { hideToolbar(); return; }
+    const range = sel.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    showToolbar(rect.left + window.scrollX + rect.width / 2, rect.top + window.scrollY - 40);
+  });
+
+  document.addEventListener('scroll', hideToolbar);
+  document.addEventListener('mousedown', (e)=>{
+    if(!toolbar.contains(e.target)) hideToolbar();
+  });
+
+  function showToolbar(x, y) {
+    toolbar.style.left = `${x - toolbar.offsetWidth / 2}px`;
+    toolbar.style.top = `${y - 40}px`;
+    toolbar.hidden = false;
+    toolbar.style.opacity = '1';
+  }
+
+  function hideToolbar() {
+    toolbar.hidden = true;
+  }
+})();
+
 // ===== 붙여넣기 시 굵은 글자만 노란색 =====
 document.querySelectorAll('.rte, #sermonBody, #b').forEach(ed=>{
   ed.addEventListener('paste', (e)=>{
@@ -1906,8 +2095,16 @@ document.querySelectorAll('.rte, #sermonBody, #b').forEach(ed=>{
     document.execCommand('insertHTML', false, temp.innerHTML);
   });
 });
-    
+
   </script>
+
+<!-- ===== 선택 시 나타나는 인라인 툴바 ===== -->
+<div id="inlineToolbar" class="inline-toolbar" hidden>
+  <button data-cmd="bold" title="굵게(B)"><b>B</b></button>
+  <button data-cmd="italic" title="기울임(I)"><i>I</i></button>
+  <button data-cmd="underline" title="밑줄(U)"><u>U</u></button>
+  <input type="color" id="textColor" title="글자색" />
+</div>
 
 <!-- ===== Floating Format Bubble (공용) ===== -->
 <style>
@@ -2200,10 +2397,10 @@ document.querySelectorAll('.rte, #sermonBody, #b').forEach(ed=>{
     const b = e.target.closest('button[data-cmd]');
     if(!b) return;
     const cmd = b.dataset.cmd;
-  
+
     // 메뉴 닫기
     menu.classList.remove('open');
-  
+
     // 형식 적용
     if(cmd==='p') applyBlock('P');
     else if(cmd==='h1') applyBlock('H1');
@@ -2212,7 +2409,7 @@ document.querySelectorAll('.rte, #sermonBody, #b').forEach(ed=>{
     else if(cmd==='ul') toggleList('ul');
     else if(cmd==='ol') toggleList('ol');
     else if(cmd==='toggle') makeToggle();
-  
+
     // ✅ 형식 적용 후 툴바 자동 숨김
     const bubble = document.getElementById('fmtBubble');
     if(bubble) bubble.style.display = 'none';
@@ -2375,6 +2572,6 @@ document.querySelectorAll('.rte, #sermonBody, #b').forEach(ed=>{
 
 })();
 </script>
-  
+
 </body>
 </html>
