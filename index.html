@@ -213,6 +213,30 @@
   cursor: pointer;
   background: none;
 }
+
+/* ===== Heading 스타일 구분 ===== */
+.rte h1 {
+  font-size: 1.7em;
+  font-weight: 800;
+  color: #ffd86b;
+  border-bottom: 2px solid #555;
+  margin: 0.6em 0 0.4em;
+  padding-bottom: 0.2em;
+}
+.rte h2 {
+  font-size: 1.4em;
+  font-weight: 700;
+  color: #9fd0ff;
+  border-left: 4px solid #9fd0ff;
+  padding-left: 6px;
+  margin: 0.5em 0 0.3em;
+}
+.rte h3 {
+  font-size: 1.2em;
+  font-weight: 700;
+  color: #8df59b;
+  margin: 0.4em 0 0.2em;
+}
     
   </style>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Nanum+Myeongjo&display=swap" rel="stylesheet">
@@ -2156,7 +2180,6 @@ document.querySelectorAll('.rte, #sermonBody, #b').forEach(ed=>{
 </style>
 
 <div id="fmtBubble" role="toolbar" aria-hidden="true">
-  <button type="button" data-cmd="toggleList" title="전환(글머리표→번호→해제)">전환</button>
   <span class="sep"></span>
   <button type="button" data-cmd="bold" title="굵게">B</button>
   <button type="button" data-cmd="italic" title="기울임">I</button>
@@ -2393,15 +2416,24 @@ document.querySelectorAll('.rte, #sermonBody, #b').forEach(ed=>{
     const b = e.target.closest('button[data-cmd]');
     if(!b) return;
     const cmd = b.dataset.cmd;
+  
+    // 메뉴 닫기
     menu.classList.remove('open');
-    if(cmd==='p') return applyBlock('P');
-    if(cmd==='h1') return applyBlock('H1');
-    if(cmd==='h2') return applyBlock('H2');
-    if(cmd==='h3') return applyBlock('H3');
-    if(cmd==='ul') return toggleList('ul');
-    if(cmd==='ol') return toggleList('ol');
-    if(cmd==='toggle') return makeToggle();
+  
+    // 형식 적용
+    if(cmd==='p') applyBlock('P');
+    else if(cmd==='h1') applyBlock('H1');
+    else if(cmd==='h2') applyBlock('H2');
+    else if(cmd==='h3') applyBlock('H3');
+    else if(cmd==='ul') toggleList('ul');
+    else if(cmd==='ol') toggleList('ol');
+    else if(cmd==='toggle') makeToggle();
+  
+    // ✅ 형식 적용 후 툴바 자동 숨김
+    const bubble = document.getElementById('fmtBubble');
+    if(bubble) bubble.style.display = 'none';
   });
+
 })();
 </script>
   
