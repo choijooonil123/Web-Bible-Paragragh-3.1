@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Web Bible Paragraph 3.4</title>
+  <title>Web Bible Paragraph 3.2</title>
+  <title>Web Bible Paragraph 3.3</title>
   <style>
     :root{
       --bg:#0f1115; --panel:#161922; --text:#e6e8ef; --muted:#9aa0ab;
@@ -205,7 +206,8 @@
 
 <body>
   <header>
-    <h1>Web Bible Paragraph 3.4</h1>
+    <h1>Web Bible Paragraph 3.2</h1>
+    <h1>Web Bible Paragraph 3.3</h1>
 
     <div class="pill"><button id="btnSaveJSON">JSON 저장</button></div>
 
@@ -539,17 +541,20 @@
         const chWrap = document.createElement('div'); chWrap.className='chapters';
         const chapters = Object.keys(BIBLE.books[bookName]).map(n=>parseInt(n,10)).sort((a,b)=>a-b);
 
-        for (const ch of chapters) {
+        for(const ch of chapters){
           const detChap = document.createElement('details');
           const sumChap = document.createElement('summary');
-        
-          // ✅ 장 제목(칩) + 내용요약 버튼을 summary 안에 같이 배치
-          sumChap.innerHTML = `
-            <span class="chip">${ch}장</span>
-            <button class="ctxBtn btnSummaryChap" data-book="${bookName}" data-chap="${ch}" style="margin-left:6px">내용요약</button>
-          `;
+          sumChap.innerHTML = `<span class="chip">${ch}장</span>`;
           detChap.appendChild(sumChap);
-        
+
+          /* ✅ 여기 추가: 장 요약 버튼 */
+          const chapToolbar = document.createElement('div');
+          chapToolbar.className = 'ptoolbar';
+          chapToolbar.innerHTML = `
+            <button class="ctxBtn btnSummaryChap">내용요약</button>
+          `;
+          detChap.appendChild(chapToolbar);
+
           const parWrap = document.createElement('div'); 
           parWrap.className='paras';
 
@@ -864,7 +869,7 @@
 
       // ✅ 단락 정보 복원
       modalRef.textContent = `${CURRENT.book} ${CURRENT.chap}장 · ${para.title || para.ref} (${para.ref}) — ${titlePrefix}`;
-      
+
       const key = 
         kind==='unit'       ? STORAGE_UNIT_CTX :
         kind==='whole'      ? STORAGE_WHOLE_CTX :
