@@ -2103,19 +2103,55 @@ document.querySelectorAll('.rte, #sermonBody, #b').forEach(ed=>{
 
 <!-- ===== Floating Format Bubble (공용) ===== -->
 <style>
-  #fmtBubble{
-    position: fixed; inset:auto auto 0 0; transform: translate(-50%, -8px);
-    background: #161922; border:1px solid #252a36; border-radius: 10px;
-    display: none; gap: 6px; align-items: center; padding: 6px 8px; z-index: 9999;
-    box-shadow: 0 6px 16px rgba(0,0,0,.35);
+  /* ===== Ultra-Compact Floating Format Bubble ===== */
+  #fmtBubble {
+    position: fixed;
+    transform: translate(-50%, -5px);
+    background: rgba(22,25,34,0.9);
+    border: 1px solid #2b3040;
+    border-radius: 5px;
+    display: none;
+    gap: 3px;
+    align-items: center;
+    padding: 2px 3px;
+    z-index: 9999;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    backdrop-filter: blur(4px);
+    height: 24px;
   }
-  #fmtBubble button{
-    background: transparent; color:#e6e8ef; border:1px solid #2a3040;
-    border-radius:8px; padding:4px 8px; cursor:pointer;
+  #fmtBubble button {
+    background: transparent;
+    color: #e6e8ef;
+    border: none;
+    border-radius: 3px;
+    padding: 1px 3px;
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+    font-weight: 600;
+    opacity: 0.8;
+    user-select: none;
   }
-  #fmtBubble button:hover{ border-color:#6ea8fe }
-  #fmtBubble .sep{ width:1px; height:18px; background:#252a36; margin:0 2px }
-  #fmtBubble input[type="color"]{ width:28px; height:24px; padding:0; border:1px solid #2a3040; border-radius:6px; background:transparent }
+  #fmtBubble button:hover {
+    background: rgba(110,168,254,0.15);
+    color: #9fd0ff;
+    opacity: 1;
+  }
+  #fmtBubble .sep {
+    width: 1px;
+    height: 12px;
+    background: #2a2f3d;
+    margin: 0 1px;
+  }
+  #fmtBubble input[type="color"] {
+    width: 16px;
+    height: 16px;
+    border: none;
+    border-radius: 3px;
+    padding: 0;
+    cursor: pointer;
+    background: transparent;
+  }
 </style>
 
 <div id="fmtBubble" role="toolbar" aria-hidden="true">
