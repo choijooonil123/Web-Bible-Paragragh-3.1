@@ -2304,7 +2304,106 @@ document.querySelectorAll('.rte, #sermonBody, #b').forEach(ed=>{
 
 })();
 </script>
-<!-- ===== /Floating Format Bubble ===== -->
+<script>
+// === 전환 드롭다운 추가 ===
+(function(){
+  const bubble = document.getElementById('fmtBubble');
+  if (!bubble) return;
+
+  // 1. "전환" 버튼 생성
+  const switchBtn = document.createElement('button');
+  switchBtn.textContent = '전환';
+  switchBtn.className = 'fmt-btn';
+  switchBtn.title = '형식 전환';
+  switchBtn.style.fontSize = '13px';
+  switchBtn.style.padding = '3px 6px';
+  bubble.prepend(switchBtn);
+
+  // 2. 드롭다운 메뉴 생성
+  const menu = document.createElement('div');
+  menu.className = 'fmt-menu';
+  menu.innerHTML = `
+    <button data-cmd="p">텍스트 (P)</button>
+    <button data-cmd="h1">제목 1 (H1)</button>
+    <button data-cmd="h2">제목 2 (H2)</button>
+    <button data-cmd="h3">제목 3 (H3)</button>
+    <button data-cmd="ul">글머리 목록 (UL)</button>
+    <button data-cmd="ol">번호 목록 (OL)</button>
+    <button data-cmd="toggle">토글 목록</button>
+  `;
+  switchBtn.appendChild(menu);
+
+  // 3. 메뉴 열기/닫기
+  switchBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    menu.classList.toggle('open');
+  });
+  document.addEventListener('click', (e)=>{
+    if(!menu.contains(e.target) && !switchBtn.contains(e.target))
+      menu.classList.remove('open');
+  });
+
+  // 4. 메뉴 스타일 (아주 작게)
+  const css = document.createElement('style');
+  css.textContent = `
+  .fmt-menu{
+    position:absolute; inset:auto auto 0 0; transform:translateY(120%);
+    background:#11151c; border:1px solid #2a3040; border-radius:8px;
+    padding:4px; display:none; min-width:140px; z-index:9999;
+    box-shadow:0 6px 16px rgba(0,0,0,.35);
+  }
+  .fmt-menu.open{ display:block }
+  .fmt-menu button{
+    display:block; width:100%; padding:5px 8px; margin:1px 0;
+    font-size:12px; background:transparent; border:0; border-radius:6px;
+    color:#e6e8ef; text-align:left; cursor:pointer;
+  }
+  .fmt-menu button:hover{ background:#1a2030; color:#9fd0ff; }
+  `;
+  document.head.appendChild(css);
+
+  // 5. 포맷 명령 실행 함수들
+  function applyBlock(tag){ document.execCommand('formatBlock', false, tag); }
+  function toggleList(kind){
+    document.execCommand(kind==='ul' ? 'insertUnorderedList' : 'insertOrderedList', false, null);
+  }
+
+  // 6. 토글 목록 생성
+  function makeToggle(){
+    const sel = window.getSelection();
+    if(!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    const frag = range.extractContents();
+    const div = document.createElement('div');
+    div.appendChild(frag);
+
+    const lines = div.textContent.trim().split(/\n+/);
+    const summary = lines.shift() || '제목';
+    const content = lines.length ? lines.map(l=>`<p>${l}</p>`).join('') : '<p>내용</p>';
+
+    const details = document.createElement('details');
+    details.open = true;
+    details.innerHTML = `<summary>${summary}</summary><div>${content}</div>`;
+
+    range.insertNode(details);
+  }
+
+  // 7. 메뉴 클릭 시 실행
+  menu.addEventListener('click', e=>{
+    const b = e.target.closest('button[data-cmd]');
+    if(!b) return;
+    const cmd = b.dataset.cmd;
+    menu.classList.remove('open');
+    if(cmd==='p') return applyBlock('P');
+    if(cmd==='h1') return applyBlock('H1');
+    if(cmd==='h2') return applyBlock('H2');
+    if(cmd==='h3') return applyBlock('H3');
+    if(cmd==='ul') return toggleList('ul');
+    if(cmd==='ol') return toggleList('ol');
+    if(cmd==='toggle') return makeToggle();
+  });
+})();
+</script>
   
 </body>
 </html>
