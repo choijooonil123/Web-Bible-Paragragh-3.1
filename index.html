@@ -850,6 +850,9 @@
         kind==='commentary' ? '주석' :
                               '내용요약';
 
+      // ✅ 단락 정보 복원
+      modalRef.textContent = `${CURRENT.book} ${CURRENT.chap}장 · ${para.title || para.ref} (${para.ref}) — ${titlePrefix}`;
+      
       const key = 
         kind==='unit'       ? STORAGE_UNIT_CTX :
         kind==='whole'      ? STORAGE_WHOLE_CTX :
