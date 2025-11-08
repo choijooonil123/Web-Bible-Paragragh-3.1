@@ -179,10 +179,54 @@
       max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
     .ptoolbar .sermBtn{ margin-left:auto }
-    
+
     /* 응급: 설교 버튼 가시성 강제 */
     .ptoolbar .sermBtn { display:inline-flex !important; visibility:visible !important; opacity:1 !important; }
 
+    /* === 절문장 서식 툴바 === */
+    #wbp-plbar{
+      position: fixed; left:0; top:0;
+      transform: translate(-50%, calc(-100% - 10px));
+      background:#0f1320; border:1px solid var(--border, #252a36);
+      border-radius:10px; padding:6px;
+      display:flex; gap:6px; align-items:center;
+      box-shadow:0 8px 20px rgba(0,0,0,.35); z-index:9999;
+    }
+    #wbp-plbar[hidden]{ display:none; }
+    #wbp-plbar .divider{ width:1px; height:20px; background:var(--border, #252a36); }
+    #wbp-plbar button{
+      border:1px solid var(--border, #252a36); background:#1f2533; color:#e6e8ef;
+      padding:6px 8px; border-radius:8px; cursor:pointer; font-weight:700;
+    }
+    #wbp-plbar button:hover{ background:#273046; }
+
+    /* 색상 팔레트(6색) + 더보기 드롭다운 */
+    #wbp-color-menu{ position:relative; }
+    #wbp-color-more{
+      position:absolute; top:calc(100% + 6px); left:0;
+      background:#0f1320; border:1px solid var(--border, #252a36);
+      border-radius:10px; padding:8px; display:none; gap:6px; flex-wrap:wrap;
+    }
+    #wbp-color-more [data-color]{ width:20px; height:20px; border-radius:4px; border:1px solid #0005; cursor:pointer; }
+    #wbp-color-menu.open #wbp-color-more{ display:flex; }
+
+    /* ==== 컨텐츠가 채워진 버튼 시각 강조 ==== */
+    .ptoolbar button.filled {
+      color:#fff; border-width:1px; box-shadow:0 0 6px rgba(0,0,0,0.25);
+    }
+    .ptoolbar .btnSummary.filled { background:#6a5acd; border-color:#7b68ee; }
+    .ptoolbar .btnUnitCtx.filled { background:#9370db; border-color:#b48cf0; }
+    .ptoolbar .btnWholeCtx.filled{ background:#4682b4; border-color:#5ca5e5; }
+    .ptoolbar .btnCommentary.filled{ background:#3cb371; border-color:#58d68d; }
+    .ptoolbar .sermBtn.filled    { background:#ff8c00; border-color:#ffa94d; }
+    .ptoolbar button.filled::after{ content:"●"; font-size:10px; margin-left:6px; opacity:.8; color:rgba(255,255,255,0.85); }
+
+    .ptoolbar button { transition: background .25s ease, border-color .25s ease, color .25s ease; }
+
+    /* 편집 모드 표시 */
+    details.para .pcontent[contenteditable="true"]{
+      outline: 1px dashed #3b4b7a; outline-offset: 2px;
+    }
   </style>
 
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Nanum+Myeongjo&display=swap" rel="stylesheet">
@@ -266,6 +310,356 @@
     </div>
   </div>
 
+  <!-- 플로팅 서식툴바: 절(.verse/.pline) 선택 시 표시 -->
+  <div id="wbp-plbar" hidden role="toolbar" aria-label="절 서식">
+    <button type="button" data-cmd="bold" title="굵게 (Ctrl+B)"><b>B</b></button>
+    <button type="button" data-cmd="italic" title="기울임 (Ctrl+I)"><i>I</i></button>
+    <button type="button" data-cmd="underline" title="밑줄 (Ctrl+U)"><u>U</u></button>
+    <div class="divider" style="margin:0 4px;"></div>
+
+    <!-- 6색 고정 팔레트 -->
+    <button type="button" data-color="#ff4d4f" title="빨강" style="width:28px;height:28px;border-radius:6px;background:#ff4d4f;border:1px solid #0005"></button>
+    <button type="button" data-color="#faad14" title="주황" style="width:28px;height:28px;border-radius:6px;background:#faad14;border:1px solid #0005"></button>
+    <button type="button" data-color="#fadb14" title="노랑" style="width:28px;height:28px;border-radius:6px;background:#fadb14;border:1px solid #0005"></button>
+    <button type="button" data-color="#52c41a" title="초록" style="width:28px;height:28px;border-radius:6px;background:#52c41a;border:1px solid #0005"></button>
+    <button type="button" data-color="#1890ff" title="파랑" style="width:28px;height:28px;border-radius:6px;background:#1890ff;border:1px solid #0005"></button>
+    <button type="button" data-color="#722ed1" title="보라" style="width:28px;height:28px;border-radius:6px;background:#722ed1;border:1px solid #0005"></button>
+
+    <!-- 더보기(드롭다운 팔레트) -->
+    <div id="wbp-color-menu" style="margin-left:4px;">
+      <button type="button" id="wbp-more-btn" title="더보기" style="padding:6px 8px">▼</button>
+      <div id="wbp-color-more">
+        <div data-color="#000000" title="#000000" style="background:#000000"></div>
+        <div data-color="#333333" title="#333333" style="background:#333333"></div>
+        <div data-color="#666666" title="#666666" style="background:#666666"></div>
+        <div data-color="#999999" title="#999999" style="background:#999999"></div>
+        <div data-color="#cccccc" title="#cccccc" style="background:#cccccc"></div>
+        <div data-color="#ffffff" title="#ffffff" style="background:#ffffff;border-color:#0003"></div>
+        <div data-color="#e91e63" title="#e91e63" style="background:#e91e63"></div>
+        <div data-color="#ff6b6b" title="#ff6b6b" style="background:#ff6b6b"></div>
+        <div data-color="#7c4dff" title="#7c4dff" style="background:#7c4dff"></div>
+        <div data-color="#00bcd4" title="#00bcd4" style="background:#00bcd4"></div>
+        <div data-color="#00c853" title="#00c853" style="background:#00c853"></div>
+        <div data-color="#ff9800" title="#ff9800" style="background:#ff9800"></div>
+      </div>
+    </div>
+
+    <button type="button" data-act="clearColor" title="색 제거">⨯</button>
+  </div>
+
+  <!-- 🔧 HTML 스냅샷 방식: 플로팅바 + 서식 저장/복원 모듈 -->
+  <script>
+  (function(){
+    const STORAGE_KEY = 'wbps.versefmt.html.v1';
+
+    function getFmtMap(){
+      try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'); }catch(_){ return {}; }
+    }
+    function setFmtMap(obj){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+    }
+
+    // 절 고유키: ${book}|${chap}|${para.ref}|v${verse}
+    function keyForLine(lineEl){
+      try{
+        const paraEl = lineEl.closest('details.para'); if(!paraEl) return null;
+        const t = paraEl.querySelector('summary .ptitle'); if(!t) return null;
+        const book = t.dataset.book;
+        const chap = parseInt(t.dataset.ch,10);
+        const idx  = parseInt(t.dataset.idx,10);
+        const para = (window.BIBLE?.books?.[book]?.[chap]?.paras||[])[idx];
+        const v = lineEl.dataset.verse;
+        if(!para || !v) return null;
+        return `${book}|${chap}|${para.ref}|v${v}`;
+      }catch(_){ return null; }
+    }
+
+    // 현재 선택이 있는 절 라인의 innerHTML 저장
+    function saveCurrentLine(){
+      const sel = window.getSelection?.();
+      if(!sel || !sel.rangeCount) return;
+      const node = sel.getRangeAt(0).commonAncestorContainer;
+      const el = (node.nodeType===1 ? node : node.parentElement);
+      const line = el?.closest?.('.pline, .verse-line, p.verse');
+      if(!line) return;
+      const key = keyForLine(line); if(!key) return;
+      const map = getFmtMap();
+      map[key] = line.innerHTML;
+      setFmtMap(map);
+    }
+
+    // 라인 생성/갱신 시 저장된 HTML로 복원
+    function restoreLine(line){
+      const key = keyForLine(line); if(!key) return;
+      const map = getFmtMap();
+      if(map[key]){ line.innerHTML = map[key]; }
+    }
+
+    // 초기 스캔 + DOM 변화 감시로 복원
+    function sweepRestore(root){
+      root.querySelectorAll('.pline, .verse-line, p.verse').forEach(restoreLine);
+    }
+
+    // 플로팅 툴바 표시/동작
+    (function enableFloatingToolbar(){
+      const bar = document.getElementById('wbp-plbar');
+      if(!bar){ console.warn('[WBP] toolbar element #wbp-plbar not found'); return; }
+
+      const LINE_SELECTOR  = '.pline, p.verse, .verse-line';
+      const SCOPE_SELECTOR = '.pcontent, .editor, main, body';
+      let savedRange = null;
+
+      function hasRealSelection(){
+        const sel = window.getSelection();
+        return !!(sel && sel.rangeCount && !sel.getRangeAt(0).collapsed);
+      }
+      function findLineFromSelection(){
+        const sel = window.getSelection(); if(!sel || sel.rangeCount===0) return null;
+        const n = sel.getRangeAt(0).commonAncestorContainer;
+        const el = (n.nodeType===1 ? n : n.parentElement);
+        return el?.closest?.(LINE_SELECTOR) || null;
+      }
+      function ensureEditableScope(line){
+        const scope = line.closest(SCOPE_SELECTOR) || line.parentElement || line;
+        if(scope && scope.getAttribute('contenteditable')!=='true'){
+          scope.setAttribute('contenteditable','true');
+        }
+      }
+      function getSelRect(){
+        const sel = window.getSelection();
+        if(!sel || sel.rangeCount===0) return null;
+        const r = sel.getRangeAt(0).cloneRange();
+        let rect = r.getBoundingClientRect();
+        if(!rect || (rect.width===0 && rect.height===0)){
+          const span = document.createElement('span');
+          span.appendChild(document.createTextNode('\u200b'));
+          r.insertNode(span);
+          rect = span.getBoundingClientRect();
+          span.remove();
+        }
+        return rect;
+      }
+      function saveSel(){
+        const sel = window.getSelection();
+        if(sel && sel.rangeCount>0) savedRange = sel.getRangeAt(0).cloneRange();
+      }
+      function restoreSel(){
+        if(!savedRange) return false;
+        const sel = window.getSelection();
+        sel.removeAllRanges(); sel.addRange(savedRange);
+        return true;
+      }
+      function hide(){ bar.hidden = true; }
+      function showBarIfLine(){
+        if(!hasRealSelection()){ hide(); return; }
+        const line = findLineFromSelection();
+        if(!line){ hide(); return; }
+        ensureEditableScope(line);
+        const rect = getSelRect(); if(!rect){ hide(); return; }
+        bar.style.left = (rect.left + rect.width/2) + 'px';
+        bar.style.top  = rect.top + 'px';
+        bar.hidden = false;
+        saveSel();
+      }
+
+      // 기본 서식 버튼(bold/italic/underline)
+      bar.addEventListener('mousedown', e=> e.preventDefault());
+      bar.addEventListener('click', e=>{
+        const btn = e.target.closest('button'); if(!btn) return;
+
+        // 색상 팔레트
+        const color = btn.getAttribute('data-color');
+        if(color){
+          if(!restoreSel()) return;
+          document.execCommand('foreColor', false, color);
+          setTimeout(saveCurrentLine, 0);
+          setTimeout(showBarIfLine, 0);
+          return;
+        }
+
+        // 더보기 토글
+        if(btn.id === 'wbp-more-btn'){
+          const menu = btn.parentElement;
+          menu.classList.toggle('open');
+          return;
+        }
+
+        // 더보기 팔레트의 칩
+        if(btn.parentElement?.id === 'wbp-color-more'){
+          return;
+        }
+
+        const cmd = btn.dataset.cmd;
+        const act = btn.dataset.act;
+        if(cmd){
+          if(!restoreSel()) return;
+          document.execCommand(cmd, false, null);
+          setTimeout(saveCurrentLine, 0);
+          setTimeout(showBarIfLine, 0);
+          return;
+        }
+        if(act === 'clearColor'){
+          if(!restoreSel()) return;
+          try{
+            const sel = window.getSelection(); if(!sel || sel.rangeCount===0) return;
+            const range = sel.getRangeAt(0);
+            const frag  = range.cloneContents();
+            const div   = document.createElement('div'); div.appendChild(frag);
+            // color 제거
+            div.querySelectorAll('span, font').forEach(n=>{
+              if(n.style?.color) n.style.color = '';
+              if(n.hasAttribute?.('color')) n.removeAttribute('color');
+              if(n.getAttribute?.('style')==='') n.removeAttribute('style');
+            });
+            range.deleteContents();
+            document.execCommand('insertHTML', false, div.innerHTML || div.textContent || '');
+          }catch(_){}
+          setTimeout(saveCurrentLine, 0);
+          setTimeout(showBarIfLine, 0);
+          return;
+        }
+      });
+
+      // 더보기 팔레트 칩 클릭 핸들러(이벤트 위임)
+      document.getElementById('wbp-color-more')?.addEventListener('click', (e)=>{
+        const chip = e.target.closest('[data-color]'); if(!chip) return;
+        const color = chip.getAttribute('data-color');
+        if(!color) return;
+        if(!restoreSel()) return;
+        document.execCommand('foreColor', false, color);
+        setTimeout(saveCurrentLine, 0);
+        setTimeout(showBarIfLine, 0);
+      });
+
+      document.addEventListener('selectionchange', ()=> setTimeout(showBarIfLine, 0));
+      document.addEventListener('mouseup',         ()=> setTimeout(showBarIfLine, 0));
+      document.addEventListener('keyup',           ()=> setTimeout(showBarIfLine, 0));
+      window.addEventListener('scroll', hide, {passive:true});
+      window.addEventListener('resize', hide);
+
+      // 단축키 Ctrl/Cmd + B/I/U
+      window.addEventListener('keydown', (e)=>{
+        if(!(e.ctrlKey||e.metaKey)) return;
+        const k = e.key.toLowerCase();
+        if(!['b','i','u'].includes(k)) return;
+        const sel = window.getSelection();
+        if(!sel || sel.rangeCount===0 || sel.getRangeAt(0).collapsed) return;
+        e.preventDefault();
+        document.execCommand(k==='b'?'bold':k==='i'?'italic':'underline', false, null);
+        setTimeout(saveCurrentLine, 0);
+        setTimeout(showBarIfLine, 0);
+      });
+    })();
+
+    // buildTree 이후/초기 로딩에서 자동 복원
+    function WBP_restoreAllLines(){
+      const root = document.getElementById('tree'); if(!root) return;
+      // 초기 스윕
+      (function initial(){
+        root.querySelectorAll('.pline, .verse-line, p.verse').forEach(el=>{
+          // restore
+          const STORAGE_KEY = 'wbps.versefmt.html.v1';
+          function getFmtMap(){
+            try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'); }catch(_){ return {}; }
+          }
+          function keyForLine(lineEl){
+            try{
+              const paraEl = lineEl.closest('details.para'); if(!paraEl) return null;
+              const t = paraEl.querySelector('summary .ptitle'); if(!t) return null;
+              const book = t.dataset.book;
+              const chap = parseInt(t.dataset.ch,10);
+              const idx  = parseInt(t.dataset.idx,10);
+              const para = (window.BIBLE?.books?.[book]?.[chap]?.paras||[])[idx];
+              const v = lineEl.dataset.verse;
+              if(!para || !v) return null;
+              return `${book}|${chap}|${para.ref}|v${v}`;
+            }catch(_){ return null; }
+          }
+          const key = keyForLine(el);
+          const map = getFmtMap();
+          if(key && map[key]) el.innerHTML = map[key];
+        });
+      })();
+
+      // 이후 동적 변화는 MutationObserver로 커버
+      const mo = new MutationObserver((muts)=>{
+        for(const m of muts){
+          m.addedNodes?.forEach?.(node=>{
+            if(!(node instanceof HTMLElement)) return;
+            if(node.matches?.('.pline, .verse-line, p.verse')){
+              // restore
+              const STORAGE_KEY = 'wbps.versefmt.html.v1';
+              function getFmtMap(){
+                try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'); }catch(_){ return {}; }
+              }
+              function keyForLine(lineEl){
+                try{
+                  const paraEl = lineEl.closest('details.para'); if(!paraEl) return null;
+                  const t = paraEl.querySelector('summary .ptitle'); if(!t) return null;
+                  const book = t.dataset.book;
+                  const chap = parseInt(t.dataset.ch,10);
+                  const idx  = parseInt(t.dataset.idx,10);
+                  const para = (window.BIBLE?.books?.[book]?.[chap]?.paras||[])[idx];
+                  const v = lineEl.dataset.verse;
+                  if(!para || !v) return null;
+                  return `${book}|${chap}|${para.ref}|v${v}`;
+                }catch(_){ return null; }
+              }
+              const key = keyForLine(node);
+              const map = getFmtMap();
+              if(key && map[key]) node.innerHTML = map[key];
+            }
+            node.querySelectorAll?.('.pline, .verse-line, p.verse')?.forEach?.(el=>{
+              const STORAGE_KEY = 'wbps.versefmt.html.v1';
+              function getFmtMap(){
+                try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)||'{}'); }catch(_){ return {}; }
+              }
+              function keyForLine(lineEl){
+                try{
+                  const paraEl = lineEl.closest('details.para'); if(!paraEl) return null;
+                  const t = paraEl.querySelector('summary .ptitle'); if(!t) return null;
+                  const book = t.dataset.book;
+                  const chap = parseInt(t.dataset.ch,10);
+                  const idx  = parseInt(t.dataset.idx,10);
+                  const para = (window.BIBLE?.books?.[book]?.[chap]?.paras||[])[idx];
+                  const v = lineEl.dataset.verse;
+                  if(!para || !v) return null;
+                  return `${book}|${chap}|${para.ref}|v${v}`;
+                }catch(_){ return null; }
+              }
+              const key = keyForLine(el);
+              const map = getFmtMap();
+              if(key && map[key]) el.innerHTML = map[key];
+            });
+          });
+        }
+      });
+      mo.observe(root, {subtree:true, childList:true});
+    }
+
+    // buildTree가 끝났을 때를 최대한 포착
+    document.addEventListener('DOMContentLoaded', ()=>{
+      // 1) 초기 한 번 시도
+      setTimeout(WBP_restoreAllLines, 300);
+      // 2) #tree 내용이 들어오는 순간도 커버
+      const root = document.getElementById('tree');
+      if(root && root.children.length===0){
+        const mo = new MutationObserver((muts)=>{
+          for(const m of muts){
+            if(m.addedNodes && m.addedNodes.length){
+              setTimeout(WBP_restoreAllLines, 0);
+              mo.disconnect();
+              break;
+            }
+          }
+        });
+        mo.observe(root, {childList:true});
+      }
+    });
+  })();
+  </script>
+
+  <!-- 기존 앱 로직 -->
   <script src="app.js" defer></script>
 </body>
 </html>
