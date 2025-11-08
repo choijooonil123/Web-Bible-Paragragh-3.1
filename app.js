@@ -945,7 +945,7 @@ el('saveSermon').onclick = ()=>{
   else { arr.unshift({ id: (crypto.randomUUID?crypto.randomUUID():String(Date.now())), title, body, images: imgs, date, link:'' }); }
   map[CURRENT.paraId] = arr; setSermonMap(map);
   sermonEditor.style.display = 'none'; renderSermonList(); status && status('설교가 저장되었습니다.');
-});
+};
 
 /* ===== RTE 유틸 ===== */
 function isRTE(){ return !!(sermonBody && sermonBody.getAttribute('contenteditable') === 'true'); }
