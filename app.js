@@ -304,6 +304,7 @@ function buildTree(){
             <button class="ctxBtn btnWholeCtx">전체성경속 맥락</button>
             <button class="ctxBtn btnCommentary">주석</button>
             <button class="sermBtn">설교</button>
+            <div class="spacer"></div>
           </div>
           <div class="pcontent"></div>`;
 
@@ -375,6 +376,8 @@ function buildTree(){
     detBook.appendChild(chWrap);
     treeEl.appendChild(detBook);
   }
+    // ✅ 바로 여기에 한 줄 추가합니다 👇👇👇
+  document.dispatchEvent(new CustomEvent('wbp:treeBuilt'));
 }
 
 // [PATCH 2 START] 렌더 후에도 설교 버튼 누락 시 자동 보정(클릭 바인딩 없음)
@@ -701,6 +704,7 @@ function openSingleDocEditor(kind){
 }
 
 /* ✅ 설교목록 렌더링 */
+/* ✅ 설교목록 렌더링 (제목 → 날짜 → 링크 → 편집 → 삭제 순서) */
 function renderSermonList(){
   const map = getSermonMap();
   const arr = map[CURRENT.paraId] || [];
@@ -712,69 +716,96 @@ function renderSermonList(){
   }
 
   arr.forEach((it, idx)=>{
-    const row = document.createElement('div'); row.className='item';
+    const row = document.createElement('div');
+    row.className = 'item'; // 필요시 레이아웃용 CSS를 추가할 수 있어요.
 
-    const linkBox = document.createElement('div');
-    linkBox.className = 'link-box';
+    // 1) 제목
+    const colTitle = document.createElement('div');
+    colTitle.className = 'col col-title';
+    colTitle.textContent = (it.title || '(제목 없음)');
+
+    // 2) 작성날짜
+    const colDate = document.createElement('div');
+    colDate.className = 'col col-date';
+    colDate.textContent = (it.date || '');
+
+    // 3) 링크 (입력 + 미리보기 앵커)
+    const colLink = document.createElement('div');
+    colLink.className = 'col col-link';
+
     const linkInput = document.createElement('input');
     linkInput.type = 'url';
     linkInput.placeholder = '링크(URL)';
     linkInput.value = it.link || '';
+    linkInput.style.minWidth = '220px';
+
     const linkAnchor = document.createElement('a');
     linkAnchor.textContent = it.link ? it.link : '';
-    if (it.link) { linkAnchor.href = it.link; linkAnchor.target = '_blank'; linkAnchor.rel='noopener noreferrer'; }
-    else { linkAnchor.style.display='none'; }
+    if (it.link) {
+      linkAnchor.href = it.link;
+      linkAnchor.target = '_blank';
+      linkAnchor.rel = 'noopener noreferrer';
+    } else {
+      linkAnchor.style.display = 'none';
+    }
 
     linkInput.addEventListener('change', ()=>{
       const url = linkInput.value.trim();
       const m = getSermonMap();
       const a = m[CURRENT.paraId] || [];
-      if (a[idx]){
+      if (a[idx]) {
         a[idx].link = url;
         setSermonMap(m);
       }
       if (url){
-        linkAnchor.href = url; linkAnchor.textContent = url;
-        linkAnchor.style.display='';
-        linkAnchor.target = '_blank'; linkAnchor.rel='noopener noreferrer';
-      }else{
+        linkAnchor.href = url;
+        linkAnchor.textContent = url;
+        linkAnchor.style.display = '';
+        linkAnchor.target = '_blank';
+        linkAnchor.rel = 'noopener noreferrer';
+      } else {
         linkAnchor.removeAttribute('href');
         linkAnchor.textContent = '';
-        linkAnchor.style.display='none';
+        linkAnchor.style.display = 'none';
       }
     });
 
-    linkBox.appendChild(linkInput);
-    linkBox.appendChild(linkAnchor);
+    colLink.appendChild(linkInput);
+    colLink.appendChild(linkAnchor);
 
-    const dateHtml = it.date ? `<span class="date">${it.date}</span>` : '';
-    const titleDiv = document.createElement('div');
-    titleDiv.className = 'item-title';
-    titleDiv.innerHTML = `${escapeHtml(it.title||'(제목 없음)')} ${dateHtml}`;
-
-    const toolbar = document.createElement('div');
-    toolbar.className = 'ptoolbar';
-    const editBtn = document.createElement('button');
-    editBtn.textContent = '편집';
-    editBtn.setAttribute('data-edit', idx);
-    const delBtn = document.createElement('button');
-    delBtn.textContent = '삭제';
-    delBtn.setAttribute('data-del', idx);
-    delBtn.style.borderColor = 'var(--danger)';
-    delBtn.style.color = 'var(--text)';
-
-    editBtn.onclick = ()=>{
-      modalWrap.style.display = 'none'; modalWrap.setAttribute('aria-hidden','true');
+    // 4) 편집 버튼
+    const btnEdit = document.createElement('button');
+    btnEdit.textContent = '편집';
+    btnEdit.addEventListener('click', ()=>{
+      modalWrap.style.display = 'none';
+      modalWrap.setAttribute('aria-hidden','true');
       openSermonEditorWindow(idx);
-    };
-    delBtn.onclick = ()=> deleteSermon(idx);
+    });
 
-    toolbar.appendChild(editBtn);
-    toolbar.appendChild(delBtn);
+    // 5) 삭제 버튼
+    const btnDel = document.createElement('button');
+    btnDel.textContent = '삭제';
+    btnDel.style.borderColor = 'var(--danger)';
+    btnDel.addEventListener('click', ()=>{
+      if(!confirm('이 설교를 삭제할까요?')) return;
+      const m = getSermonMap();
+      const a = m[CURRENT.paraId] || [];
+      a.splice(idx,1);
+      m[CURRENT.paraId] = a;
+      setSermonMap(m);
+      renderSermonList();
+    });
 
-    row.appendChild(linkBox);
-    row.appendChild(titleDiv);
-    row.appendChild(toolbar);
+    const colActions = document.createElement('div');
+    colActions.className = 'col col-actions';
+    colActions.appendChild(btnEdit);
+    colActions.appendChild(btnDel);
+
+    // 👉 순서대로 추가: 제목 → 날짜 → 링크 → 편집/삭제
+    row.appendChild(colTitle);
+    row.appendChild(colDate);
+    row.appendChild(colLink);
+    row.appendChild(colActions);
 
     sermonList.appendChild(row);
   });
@@ -1059,8 +1090,68 @@ button:hover{border-color:color-mix(in hsl,var(--border) 75%,var(--accent) 25%)}
   header, footer, #floatingBar { display:none !important; }
 }
 
+/* === 편집기(main) 스크롤 및 겹침 방지 보정 === */
+/* body를 3행 그리드(헤더/메인/푸터)로, 메인은 스크롤 가능 */
+body{
+  display: grid;
+  grid-template-rows: 56px 1fr 56px;
+  height: 100vh !important;
+  overflow: hidden !important;
+}
+
+/* main은 스크롤이 가능해야 함 + footer/floatingBar에 가리지 않도록 하단 여백 */
+main{
+  position: relative;
+  z-index: 1;
+  overflow-y: auto !important;
+  padding-top: 12px;
+  padding-bottom: 140px; /* footer 높이 + 여유 */
+  height: calc(100vh - 112px) !important; /* 56(header)+56(footer) */
+}
+
+/* 편집 영역 자체 여백 확보(아래쪽 충분히 띄워서 겹침 방지) */
+#editorRoot{
+  position: relative;
+  z-index: 1;
+  max-width: 880px;
+  margin: 12px auto 100px;  /* 아래 여유 */
+  padding: 0 8px 80px;      /* 아래 여유 */
+  overflow: visible;
+}
+
+/* 플로팅 버튼과의 겹침도 최소화(필요 시) */
+#floatingBar{
+  z-index: 50;
+}
 html, body { height:auto !important; overflow:auto !important; }
 main { height:auto !important; overflow:visible !important; }
+
+/* === 문장 낭독 하이라이트용 읽기 패널 === */
+#readPane{
+  position: fixed;
+  right: 16px;
+  top: 64px;
+  bottom: 64px;
+  width: 420px;
+  overflow-y: auto;
+  background: color-mix(in hsl, var(--panel) 92%, black 4%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 10px 28px rgba(0,0,0,.35);
+  display: none;
+}
+#readPane .sent{
+  display: block;
+  line-height: 1.8;
+  margin: 4px 0;
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+#readPane .sent.reading{
+  background: #2b3242;
+  outline: 1px solid #3b4b7a;
+}
 </style>
 </head>
 <body class="context-editor">
@@ -1092,6 +1183,8 @@ main { height:auto !important; overflow:visible !important; }
 
   <div id="neSlash" class="slash hidden"></div>
   <div id="editorRoot" aria-label="Sermon Editor"></div>
+
+  <div id="readPane" aria-label="Reading Sentences"></div>
 
   <div class="notion-footer">
     <div class="notion-badge" id="neAutosave">자동저장 대기중…</div>
@@ -1164,6 +1257,25 @@ main { height:auto !important; overflow:visible !important; }
 /* ===== 팝업 내부 스크립트 ===== */
 function initSermonPopup(win){
   const w = win, d = w.document;
+
+    // ===== 중복 제목 입력 숨기기(팝업 한정) =====
+  (function removeDuplicateTitle() {
+    const d = win.document;
+    // 현재 사용 중인 제목 입력칸
+    const mainTitle = d.getElementById('neTitle');
+    if (!mainTitle) return;
+
+    // 예전 제목 input(#t 등)이 있다면 숨김
+    const dupCandidates = [
+      ...d.querySelectorAll('input#t, input[type="text"].title-input')
+    ].filter(el => el !== mainTitle);
+
+    dupCandidates.forEach(el => {
+      el.style.display = 'none';
+      el.setAttribute('aria-hidden', 'true');
+    });
+  })();
+
 
   const $ = id => d.getElementById(id);
   const meta = w.__WBPS_META__ || {};
@@ -1477,7 +1589,7 @@ function initSermonPopup(win){
     last && last.focus();
   }
 
-  // 저장/삭제/닫기/인쇄/낭독
+  // 저장/삭제/닫기/인쇄
   d.getElementById('s').onclick = ()=>{
     const html = NblocksToHTML();
     const title = (d.getElementById('neTitle').value || d.getElementById('t').value || '').trim() || '(제목 없음)';
@@ -1489,23 +1601,140 @@ function initSermonPopup(win){
   d.getElementById('x').onclick = ()=> w.close();
   d.getElementById('print').onclick = ()=> w.print();
 
-  d.getElementById('read').onclick = ()=>{
-    const plain = toPlainText(NblocksToHTML());
-    const text = [ (d.getElementById('neTitle').value||d.getElementById('t').value||'').trim(), plain.trim() ].filter(Boolean).join('. ');
-    if(!text){ w.alert('낭독할 내용이 없습니다.'); return; }
-    const synth = w.speechSynthesis || window.speechSynthesis;
-    try{ synth.cancel(); }catch(_){}
-    const u = new w.SpeechSynthesisUtterance(text);
-    u.lang='ko-KR';
-    synth.speak(u);
-  };
-  d.getElementById('stop').onclick = ()=>{ try{ (w.speechSynthesis||window.speechSynthesis)?.cancel(); }catch(_){} };
+  /* ========= 문장 단위 낭독 + 하이라이트 + 화면 중앙 정렬 ========= */
+  const readBtn = d.getElementById('read');
+  const stopBtn = d.getElementById('stop');
+  const readPane = d.getElementById('readPane');
 
-  function toPlainText(html){
+  const TTS = {
+    sents: [],
+    idx: 0,
+    playing: false,
+    synth: w.speechSynthesis || window.speechSynthesis,
+    utter: null
+  };
+
+  function htmlToPlain(html){
     const tmp=d.createElement('div'); tmp.innerHTML=html||'';
     tmp.querySelectorAll('sup').forEach(s=> s.textContent='['+s.textContent+'] ');
-    return (tmp.textContent||'').replace(/\s+\n/g,'\n').replace(/\n{2,}/g,'\n');
+    return (tmp.textContent||'').replace(/\s+\n/g,'\n').replace(/\n{2,}/g,'\n').replace(/\s+/g,' ').trim();
   }
+
+  // 한국어/영문 종결부호 기준 문장 분할
+  function splitToSentences(text){
+    const t = String(text||'').trim();
+    if(!t) return [];
+    // 마침표, 물음표, 느낌표, 말줄임표, 한국어 종결(다.)도 일반 마침표로 처리됨
+    const parts = t.split(/(?<=[\.!\?…]|[。！？])\s+/u).filter(s=>s && s.trim().length>0);
+    return parts;
+  }
+
+  function renderReadPane(){
+    readPane.innerHTML = TTS.sents.map((s,i)=>`<span class="sent" data-i="${i}">${escapeHtml(s)}</span>`).join('');
+    readPane.style.display = '';
+  }
+
+  function clearPaneHighlight(){
+    readPane.querySelectorAll('.sent.reading').forEach(el=> el.classList.remove('reading'));
+  }
+
+  function highlightIndex(i){
+    clearPaneHighlight();
+    const span = readPane.querySelector(`.sent[data-i="${i}"]`);
+    if(span){
+      span.classList.add('reading');
+      span.scrollIntoView({block:'center', behavior:'smooth'});
+    }
+  }
+
+  function speakIdx(i){
+    if(!TTS.synth) return;
+    if(i<0 || i>=TTS.sents.length){ stopReading(); return; }
+    TTS.idx = i;
+    try{ TTS.synth.cancel(); }catch(_){}
+    const u = new w.SpeechSynthesisUtterance(TTS.sents[i]);
+    // 부모창 음성 설정을 그대로 이용하지 못하므로 기본 ko-KR로 설정
+    u.lang = 'ko-KR';
+    u.onstart = ()=>{
+      highlightIndex(i);
+    };
+    u.onend = ()=>{
+      if(!TTS.playing) return;
+      const next = i+1;
+      if(next < TTS.sents.length){
+        speakIdx(next);
+      }else{
+        stopReading();
+      }
+    };
+    u.onerror = ()=>{ // 오류 시 다음 문장으로 넘어가되 무한루프 방지
+      if(!TTS.playing) return;
+      const next = i+1;
+      if(next < TTS.sents.length) speakIdx(next); else stopReading();
+    };
+    TTS.utter = u;
+    TTS.synth.speak(u);
+  }
+
+  function startReading(){
+    const html = NblocksToHTML();
+    const title = (d.getElementById('neTitle').value || d.getElementById('t').value || '').trim();
+    const plain = [title, htmlToPlain(html)].filter(Boolean).join('. ');
+    const sents = splitToSentences(plain);
+    if(!sents.length){ w.alert('낭독할 내용이 없습니다.'); return; }
+    TTS.sents = sents;
+    TTS.idx = 0;
+    TTS.playing = true;
+    renderReadPane();
+    readBtn.textContent = '일시정지';
+    speakIdx(0);
+  }
+
+  function stopReading(){
+    TTS.playing = false;
+    try{ TTS.synth && TTS.synth.cancel(); }catch(_){}
+    clearPaneHighlight();
+    readPane.style.display = 'none';
+    readBtn.textContent = '낭독';
+  }
+
+  readBtn.onclick = ()=>{
+    if(!TTS.synth){ w.alert('이 브라우저는 음성합성을 지원하지 않습니다.'); return; }
+    if(!TTS.playing){
+      startReading();
+    }else{
+      // 일시정지 토글: 일시정지 -> 재개
+      if(TTS.synth.speaking && !TTS.synth.paused){
+        TTS.synth.pause();
+        readBtn.textContent = '재개';
+      }else if(TTS.synth.paused){
+        TTS.synth.resume();
+        readBtn.textContent = '일시정지';
+      }else{
+        startReading();
+      }
+    }
+  };
+
+  stopBtn.onclick = ()=> stopReading();
+
+  // 문장 클릭 시 해당 문장부터 재생
+  readPane.addEventListener('click', (e)=>{
+    const span = e.target.closest('.sent');
+    if(!span) return;
+    const i = +span.dataset.i;
+    if(!Number.isFinite(i)) return;
+    if(!TTS.sents.length) return;
+    TTS.playing = true;
+    readBtn.textContent = '일시정지';
+    speakIdx(i);
+  });
+
+  // 저장/삭제/닫기/낭독 끝
+  /* ========= 문장 단위 낭독 섹션 끝 ========= */
+
+  // 기존 중지 버튼 핸들러는 위에서 대체( stopReading )로 처리됨
+  // 기존 단일-문장 전체 낭독 로직은 요구사항에 맞춰 문장 단위로 치환됨
 
   // 성경 데이터 로드 유틸
   let __BOOKS_CACHE = null;
@@ -1567,7 +1796,7 @@ function initSermonPopup(win){
       '벧전':'베드로전서','베드로전서':'베드로전서','벧후':'베드로후서','베드로후서':'베드로후서',
       '요1':'요한일서','요일1':'요한일서','요한일':'요한일서','요한일서':'요한일서','요2':'요한이서','요일2':'요한이서','요한이':'요한이서','요한이서':'요한이서',
       '요3':'요한삼서','요일3':'요한삼서','요한삼':'요한삼서','요한삼서':'요한삼서','유':'유다서','유다서':'유다서','계':'요한계시록','계시록':'요한계시록','요한계시록':'요한계시록'
-    };
+    }
   }
 }
 
@@ -1585,3 +1814,108 @@ window.addEventListener('load', adjustModalEditorPadding);
 
 /* ===== 인라인 제목 편집 더미 ===== */
 function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
+
+/* === 절문장 전용 서식 툴바 === */
+(function(){
+  const bar = document.getElementById('vbar');
+  const color = document.getElementById('vcolor');
+  const docEl = document.getElementById('doc');
+  if(!bar || !docEl) return;
+
+  let savedRange = null;
+
+  function inVerse(){
+    const sel = window.getSelection();
+    if(!sel || sel.rangeCount===0) return false;
+    const c = sel.getRangeAt(0).commonAncestorContainer;
+    const el = (c.nodeType===1 ? c : c.parentElement);
+    return !!(el && docEl.contains(el) && el.closest('.verse'));
+  }
+  function saveSel(){
+    const sel = window.getSelection();
+    if(sel && sel.rangeCount>0) savedRange = sel.getRangeAt(0).cloneRange();
+  }
+  function restoreSel(){
+    if(!savedRange) return false;
+    const sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(savedRange);
+    return true;
+  }
+  function selRect(){
+    const sel = window.getSelection();
+    if(!sel || sel.rangeCount===0) return null;
+    const r = sel.getRangeAt(0).cloneRange();
+    let rect = r.getBoundingClientRect();
+    if(!rect || (rect.width===0 && rect.height===0)){
+      const span = document.createElement('span');
+      span.appendChild(document.createTextNode('\u200b'));
+      r.insertNode(span);
+      rect = span.getBoundingClientRect();
+      span.remove();
+    }
+    return rect;
+  }
+  function showBar(){
+    const sel = window.getSelection();
+    if(!sel || sel.isCollapsed || !inVerse()){ hide(); return; }
+    const rect = selRect(); if(!rect){ hide(); return; }
+    bar.style.left = (rect.left + rect.width/2) + 'px';
+    bar.style.top  = rect.top + 'px';
+    bar.hidden = false;
+    saveSel();
+  }
+  function hide(){ bar.hidden = true; }
+
+  bar.addEventListener('mousedown', e=> e.preventDefault());
+  bar.addEventListener('click', e=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    if(!restoreSel()) return;
+
+    const cmd = btn.dataset.cmd;
+    const act = btn.dataset.act;
+    if(cmd){
+      document.execCommand(cmd,false,null);
+      saveSel(); showBar();
+      return;
+    }
+    if(act==='clearColor'){
+      try{
+        const sel = window.getSelection(); if(!sel || sel.rangeCount===0) return;
+        const range = sel.getRangeAt(0);
+        const frag  = range.cloneContents();
+        const div   = document.createElement('div'); div.appendChild(frag);
+        div.querySelectorAll('span, font').forEach(n=>{
+          if(n.style?.color) n.style.color = '';
+          if(n.hasAttribute?.('color')) n.removeAttribute('color');
+        });
+        range.deleteContents();
+        document.execCommand('insertHTML', false, div.innerHTML);
+      }catch(_){}
+      saveSel(); showBar();
+    }
+  });
+  color?.addEventListener('input', ()=>{
+    if(!restoreSel()) return;
+    document.execCommand('foreColor', false, color.value);
+    saveSel(); showBar();
+  });
+
+  document.addEventListener('selectionchange', ()=>{
+    if(inVerse()) showBar(); else hide();
+  });
+  docEl.addEventListener('mouseup', ()=> setTimeout(showBar, 0));
+  docEl.addEventListener('keyup',   ()=> setTimeout(showBar, 0));
+  window.addEventListener('scroll', hide, {passive:true});
+  window.addEventListener('resize', hide);
+
+  window.addEventListener('keydown', (e)=>{
+    if(!inVerse()) return;
+    if(!(e.ctrlKey||e.metaKey)) return;
+    const k=e.key.toLowerCase();
+    if(['b','i','u'].includes(k)){
+      e.preventDefault();
+      document.execCommand(k==='b'?'bold':k==='i'?'italic':'underline',false,null);
+      setTimeout(showBar,0);
+    }
+  });
+})();
