@@ -217,12 +217,12 @@
       <button id="btnImportAll">내용 가져오기</button>
     </div>
 
-    <!-- <header> 내부의 아무 위치나 좋습니다. 이미 있으면 이 단계는 건너뛰세요 -->
-    <div class="actions"></div>
-    <style>
-      header .actions{ display:inline-flex; gap:8px; margin-left:auto; align-items:center; }
-    </style>
-
+    <!-- ✅ 서식 I/O 버튼 모음: 정적 삽입 -->
+    <div class="actions" id="fmtActions">
+      <button id="btnFmtExport" type="button">서식 내보내기</button>
+      <button id="btnFmtImport" type="button">서식 가져오기</button>
+      <input id="fmtImportFile" type="file" accept="application/json" hidden>
+    </div>
 
   </header>
 
