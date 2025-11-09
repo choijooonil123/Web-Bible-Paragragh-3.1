@@ -2106,6 +2106,77 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   })();
   /* ===== [FORMAT IO PATCH — DO NOT EDIT ABOVE] ===== */
 
+  /* ===== Fmt Toolbar Bootstrap (failsafe) ===== */
+  (function(){
+    function mount(){
+      if (!window.FmtIO || !window.FmtIO.ensure) return;
+  
+      // 1) 버튼들이 없으면 생성
+      const { btnExport, btnImport, fileInput } = window.FmtIO.ensure();
+  
+      // 2) 중복 방지 플래그로 안전 바인딩
+      if (btnExport && !btnExport._wbpBound){
+        btnExport._wbpBound = 1;
+        btnExport.addEventListener('click', ()=> {
+          try{
+            const json = window.FmtIO.buildJSON();
+            window.FmtIO.download(json, `formatting-${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+          }catch(err){
+            console.error('[FmtIO] export failed:', err);
+            alert('서식 내보내기에 실패했습니다.');
+          }
+        });
+      }
+  
+      if (btnImport && !btnImport._wbpBound){
+        btnImport._wbpBound = 1;
+        btnImport.addEventListener('click', ()=>{
+          const fi = document.getElementById('fmtImportFile');
+          fi && fi.click();
+        });
+      }
+  
+      const fi = document.getElementById('fmtImportFile');
+      if (fi && !fi._wbpBound){
+        fi._wbpBound = 1;
+        fi.addEventListener('change', async (ev)=>{
+          const f = ev.target.files && ev.target.files[0];
+          if(!f) return;
+          try{
+            const text = await f.text();
+            const data = JSON.parse(text);
+            window.FmtIO.applyJSON(data);
+          }catch(err){
+            console.error('[FmtIO] import failed:', err);
+            alert('서식 가져오기에 실패했습니다. JSON 파일을 확인하세요.');
+          }finally{
+            ev.target.value = '';
+          }
+        });
+      }
+    }
+  
+    // DOMContentLoaded 전/후 모두 커버
+    if (document.readyState === 'loading'){
+      document.addEventListener('DOMContentLoaded', mount, { once:true });
+    } else {
+      mount();
+    }
+  
+    // header/.actions가 "나중에" 만들어지는 경우까지 커버: 잠깐 재시도 + 옵저버
+    let tries = 0;
+    const tick = setInterval(()=>{
+      mount();
+      if (++tries > 20) clearInterval(tick); // ~4초
+    }, 200);
+  
+    const obs = new MutationObserver(()=> mount());
+    obs.observe(document.documentElement, { subtree:true, childList:true });
+    // 초기 안정화 후 과도한 감시 중단(선택)
+    setTimeout(()=> obs.disconnect(), 6000);
+  })();
+
+  
 })();
 
 
