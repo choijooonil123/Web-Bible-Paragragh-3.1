@@ -2050,7 +2050,186 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
     }
   });
 
+  /* ===== [FORMAT IO PATCH — DO NOT EDIT BELOW] ===== */
+  (function(){
+    // === 0) 프로젝트에 맞춰 최소한만 조정 가능한 상수 (필요 시 아래 2줄만 바꾸면 됩니다) ===
+    const VERSE_SELECTOR = '.verse, [data-vid]';  // 절 컨테이너 선택자
+    const PARA_ATTR      = 'data-para-id';       // 문단 컨테이너 식별용 속성 (없으면 그대로 둠)
   
+    // === 1) 유틸 ===
+    const $  = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  
+    function ensureButtons(){
+      // header .actions 가 없으면 header 내 아무 곳에 붙임
+      let host = $('.actions', $('header')) || $('header') || document.body;
+  
+      // 이미 있으면 재생성 안 함
+      let btnExport = $('#btnFmtExport');
+      let btnImport = $('#btnFmtImport');
+      let fileInput = $('#fmtImportFile');
+  
+      if(!btnExport){
+        btnExport = document.createElement('button');
+        btnExport.id = 'btnFmtExport';
+        btnExport.type = 'button';
+        btnExport.textContent = '서식 내보내기';
+        host.appendChild(btnExport);
+      }
+      if(!btnImport){
+        btnImport = document.createElement('button');
+        btnImport.id = 'btnFmtImport';
+        btnImport.type = 'button';
+        btnImport.textContent = '서식 가져오기';
+        host.appendChild(btnImport);
+      }
+      if(!fileInput){
+        fileInput = document.createElement('input');
+        fileInput.id = 'fmtImportFile';
+        fileInput.type = 'file';
+        fileInput.accept = 'application/json';
+        fileInput.hidden = true;
+        host.appendChild(fileInput);
+      }
+      return { btnExport, btnImport, fileInput };
+    }
+  
+    // === 2) 절 컨테이너 찾기 & 안정적 ID 만들기 ===
+    function getVerseNodes(){
+      // 중복 제거
+      const set = new Set();
+      $$(VERSE_SELECTOR).forEach(n => set.add(n));
+      return Array.from(set);
+    }
+  
+    function nodeId(node){
+      // 1순위: data-vid, 2순위: id, 3순위: para::index
+      const byAttr = node.getAttribute('data-vid');
+      if(byAttr) return byAttr;
+      if(node.id) return node.id;
+  
+      const para = node.closest(`[${PARA_ATTR}]`);
+      const paraId = para ? para.getAttribute(PARA_ATTR) : 'para';
+      const idx = node.parentNode ? Array.prototype.indexOf.call(node.parentNode.children, node) : -1;
+      return `${paraId}::${idx}`;
+    }
+  
+    // === 3) runs 추출/복원 ===
+    function extractRunsFrom(node){
+      const runs = [];
+      function walk(n, marks){
+        if(n.nodeType === Node.TEXT_NODE){
+          const t = n.nodeValue || '';
+          if(t){
+            runs.push({ t, b: !!marks.b, i: !!marks.i, u: !!marks.u, color: marks.color || null });
+          }
+          return;
+        }
+        if(n.nodeType === Node.ELEMENT_NODE){
+          const m = { ...marks };
+          const tag = n.tagName.toLowerCase();
+  
+          if(tag === 'b' || tag === 'strong') m.b = true;
+          if(tag === 'i' || tag === 'em')    m.i = true;
+          if(tag === 'u')                     m.u = true;
+  
+          // 인라인 color(style)만 취급 — 클래스/상속 색은 복원 불가하므로 내보낼 때 확정 색만
+          const c = n.style && n.style.color;
+          if(c) m.color = c;
+  
+          for(const ch of n.childNodes) walk(ch, m);
+        }
+      }
+      walk(node, {});
+      return { id: nodeId(node), runs };
+    }
+  
+    function escapeHTML(s){
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+  
+    function runsToHTML(runs){
+      return (runs||[]).map(r=>{
+        let t = escapeHTML(r.t);
+        if(r.color) t = `<span style="color:${r.color}">${t}</span>`;
+        if(r.b) t = `<b>${t}</b>`;
+        if(r.i) t = `<i>${t}</i>`;
+        if(r.u) t = `<u>${t}</u>`;
+        return t;
+      }).join('');
+    }
+  
+    // === 4) 공개 API (전역 노출도 함께) ===
+    function buildJSON(){
+      const items = getVerseNodes().map(n => extractRunsFrom(n));
+      return {
+        type: 'format-runs',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        items
+      };
+    }
+  
+    function applyJSON(data){
+      if(!data || data.type!=='format-runs' || !Array.isArray(data.items)) throw new Error('Invalid format JSON');
+      const index = new Map();
+      getVerseNodes().forEach(n => index.set(nodeId(n), n));
+      for(const item of data.items){
+        const n = index.get(item.id);
+        if(!n) continue; // 현재 문서에 해당 절이 없을 수 있음
+        n.innerHTML = runsToHTML(item.runs);
+      }
+    }
+  
+    function download(obj, filename){
+      const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+    }
+  
+    // 전역 노출(디버그/외부 호출용)
+    window.FmtIO = { buildJSON, applyJSON, download };
+  
+    // === 5) 바인딩 — DOMContentLoaded 보장, 버튼이 없으면 자동 생성 ===
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const { btnExport, btnImport, fileInput } = ensureButtons();
+  
+      btnExport?.addEventListener('click', ()=>{
+        try{
+          const json = buildJSON();
+          download(json, `formatting-${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
+        }catch(err){
+          console.error('[FmtIO] export failed:', err);
+          alert('서식 내보내기에 실패했습니다.');
+        }
+      });
+  
+      btnImport?.addEventListener('click', ()=> fileInput?.click());
+  
+      fileInput?.addEventListener('change', async (ev)=>{
+        const f = ev.target.files && ev.target.files[0];
+        if(!f) return;
+        try{
+          const text = await f.text();
+          const data = JSON.parse(text);
+          applyJSON(data);
+        }catch(err){
+          console.error('[FmtIO] import failed:', err);
+          alert('서식 가져오기에 실패했습니다. JSON 파일을 확인하세요.');
+        }finally{
+          ev.target.value = '';
+        }
+      });
+  
+      // 디버그: 절 개수 표시 (필요 없으면 지워도 됨)
+      // console.log('[FmtIO] verses:', getVerseNodes().length);
+    });
+  })();
+  /* ===== [FORMAT IO PATCH — DO NOT EDIT ABOVE] ===== */
+
 })();
 
 
