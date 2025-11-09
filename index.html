@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Web Bible Paragraph Sermon</title>
   <style>
     :root{
@@ -65,8 +65,10 @@
 
     .pbody{ margin-top:8px; border-top:1px dashed var(--border); padding-top:8px }
     .ptoolbar{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px }
+
+    /* ✅ 설교 버튼이 가려지거나 사라지는 것 방지 */
     .ptoolbar .spacer { flex: 1 1 auto; }
-    .ptoolbar .sermBtn { display: inline-flex !important; visibility:visible !important; opacity:1 !important; }
+    .ptoolbar .sermBtn { display: inline-flex; }
 
     .pline{ padding:4px 6px; border-left:3px solid transparent; border-radius:8px; transition: background .15s, border-color .15s }
     .pline:hover{ background:color-mix(in hsl, var(--panel) 80%, black 12%) }
@@ -90,6 +92,7 @@
     .editor-bar{ display:flex; gap:8px; align-items:center; flex-wrap:wrap }
     .editor-bar .grow{ flex:1 1 auto }
 
+    /* [맥락 편집기 전용] 보기 좋은 타이포/레이아웃 */
     .context-editor {
       font-family: "Noto Serif KR", "Nanum Myeongjo", serif;
       font-size: 1.05rem;
@@ -124,7 +127,7 @@
       .context-editor blockquote{color:#445066;background:#f7f9fc}
     }
 
-    /* 모달 편집기(sermonEditor) 줄간격 타이트 모드 */
+    /* ==== 모달 편집기(sermonEditor) 줄 간격 타이트 모드 ==== */
     #sermonEditor.context-editor .rte{
       line-height: 1.55 !important;
       letter-spacing: 0.01em !important;
@@ -134,7 +137,7 @@
     #sermonEditor.context-editor .rte .verse-line sup{ margin-right:4px; }
     #sermonEditor.context-editor .rte br{ line-height: 1.0; }
 
-    /* 모달 편집기: 본문만 스크롤 */
+    /* ===== 모달 편집기: 본문만 스크롤 ===== */
     #sermonEditor{
       display:flex; flex-direction:column;
       height: calc(94vh - 56px); min-height: calc(94vh - 56px); max-height: calc(94vh - 56px);
@@ -158,11 +161,12 @@
       border-bottom: 1px solid var(--border);
     }
 
-    /* 삽입된 성경구절 스타일 */
+    /* ===== 삽입된 성경구절 스타일 ===== */
     .inserted-verse { font-style: italic; color: #ff8080; }
     .verse-header { margin-bottom:2px; }
     .verse-line { font-style: italic; color:#ff8080; }
 
+    /* 설교목록 링크 필드 */
     .link-box{
       display:flex; align-items:center; gap:6px; min-width:260px; flex:1 1 320px;
     }
@@ -174,32 +178,11 @@
       text-decoration:underline; color:#9fd0ff; word-break:break-all;
       max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
+    .ptoolbar .sermBtn{ margin-left:auto }
+    
+    /* 응급: 설교 버튼 가시성 강제 */
+    .ptoolbar .sermBtn { display:inline-flex !important; visibility:visible !important; opacity:1 !important; }
 
-    #floatingBar{ position:fixed; right:16px; bottom:16px; z-index:9999; }
-    html, body{ overflow:visible !important; }
-
-    /* === 모달 RTE용 플로팅 툴바 === */
-    .floating-rte-toolbar{
-      position:absolute;
-      z-index:1000;
-      display:flex; gap:6px; align-items:center;
-      background: color-mix(in hsl, var(--panel) 85%, black 6%);
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:6px;
-      box-shadow:0 10px 24px rgba(0,0,0,.35);
-      transform: translate(-50%, -100%);
-      min-width: fit-content;
-    }
-    .floating-rte-toolbar button{
-      border-radius:8px; padding:4px 8px; line-height:1;
-      border:1px solid var(--border);
-      background: color-mix(in hsl, var(--panel) 75%, black 4%);
-    }
-    .floating-rte-toolbar .swatch{
-      width:18px; height:18px; border-radius:4px; border:1px solid var(--border);
-      display:inline-block; padding:0; margin:0; line-height:0;
-    }
   </style>
 
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Nanum+Myeongjo&display=swap" rel="stylesheet">
@@ -257,10 +240,9 @@
 
       <div class="list" id="sermonList"></div>
 
-      <!-- 단일 편집기 -->
+      <!-- 단일 편집기 (중복 제거) -->
       <div class="editor context-editor" id="sermonEditor" style="display:none">
         <div id="rteToolbar" class="editor-bar">
-          <!-- 기본 버튼(백업용) -->
           <button type="button" onclick="execFmt('bold')"><b>B</b></button>
           <button type="button" onclick="execFmt('italic')"><i>I</i></button>
           <button type="button" onclick="execFmt('underline')"><u>U</u></button>
