@@ -270,5 +270,95 @@
   </div>
 
   <script src="app.js" defer></script>
+
+  <script>
+    /* ========= Floating Toolbar for #sermonBody ========= */
+    (function installFloatingToolbarForModalRTE(){
+      const target = document.getElementById('sermonBody');
+      if(!target || target.getAttribute('contenteditable')!=='true') return;
+
+      // 1) 스타일 주입
+      const css = `
+      .flt-toolbar{
+        position:fixed; z-index:99999; display:flex; gap:6px; align-items:center;
+        background: color-mix(in hsl, var(--panel, #161922) 88%, black 6%);
+        border:1px solid var(--border, #252a36); border-radius:10px; padding:6px 8px;
+        box-shadow:0 10px 24px rgba(0,0,0,.35); backdrop-filter:saturate(1.2) blur(4px);
+      }
+      .flt-toolbar button{
+        border:1px solid var(--border, #252a36); background:#1b1f2a; color:#e6e8ef;
+        padding:4px 8px; border-radius:8px; cursor:pointer
+      }
+      .flt-toolbar button:hover{ border-color: color-mix(in hsl, var(--border, #252a36) 70%, var(--accent, #6ea8fe) 30%); }
+      .flt-toolbar .sep{ width:1px; height:18px; background:var(--border, #252a36); margin:0 2px; }
+      .flt-toolbar .chips{ display:flex; gap:6px; }
+      .flt-toolbar .chip{
+        width:18px; height:18px; border-radius:999px; border:1px solid #333; cursor:pointer;
+        outline:none; padding:0;
+      }`;
+      const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+
+      // 2) 툴바 DOM
+      const colors = ['#ffffff','#ffd166','#ef476f','#06d6a0','#118ab2','#9b59b6']; // 6색(흰/노/핑/초/파/보)
+      const bar = document.createElement('div');
+      bar.className = 'flt-toolbar';
+      bar.style.display = 'none';
+      bar.innerHTML = `
+        <button data-cmd="bold"><b>B</b></button>
+        <button data-cmd="italic"><i>I</i></button>
+        <button data-cmd="underline"><u>U</u></button>
+        <span class="sep"></span>
+        <div class="chips">
+          ${colors.map(c=>`<button class="chip" data-color="${c}" title="${c}" style="background:${c}"></button>`).join('')}
+        </div>
+      `;
+      document.body.appendChild(bar);
+
+      // 3) 유틸
+      function selectionInTarget(){
+        const sel = window.getSelection(); if(!sel || sel.rangeCount===0) return false;
+        const r = sel.getRangeAt(0);
+        return target.contains(r.commonAncestorContainer) && !sel.isCollapsed;
+      }
+      function positionBar(){
+        const sel = window.getSelection(); if(!sel || sel.rangeCount===0) return;
+        const rect = sel.getRangeAt(0).getBoundingClientRect();
+        const pad = 8;
+        let x = rect.left + (rect.width/2) - (bar.offsetWidth/2) + window.scrollX;
+        let y = rect.top - bar.offsetHeight - 8 + window.scrollY;
+        if(y < 8 + window.scrollY) y = rect.bottom + 8 + window.scrollY;
+        if(x < 8 + window.scrollX) x = 8 + window.scrollX;
+        bar.style.left = `${x}px`;
+        bar.style.top  = `${y}px`;
+      }
+      function showBar(){ bar.style.display = 'flex'; positionBar(); }
+      function hideBar(){ bar.style.display = 'none'; }
+
+      // 4) 포맷 핸들러
+      bar.addEventListener('mousedown', e=> e.preventDefault()); // 선택 사라지지 않게
+      bar.addEventListener('click', (e)=>{
+        const b = e.target.closest('button'); if(!b) return;
+        const cmd = b.dataset.cmd;
+        const color = b.dataset.color;
+        target.focus({preventScroll:true});
+        if(cmd) document.execCommand(cmd, false, null);
+        if(color) document.execCommand('foreColor', false, color);
+        // 다시 위치 보정
+        setTimeout(()=>{ if(selectionInTarget()) positionBar(); }, 0);
+      });
+
+      // 5) 이벤트 바인딩
+      function maybeToggle(){
+        if(selectionInTarget()) showBar(); else hideBar();
+      }
+      ['mouseup','keyup'].forEach(ev=>{
+        target.addEventListener(ev, ()=> setTimeout(maybeToggle, 0));
+      });
+      document.addEventListener('scroll', ()=>{ if(bar.style.display!=='none') positionBar(); }, true);
+      document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') hideBar(); }, true);
+      document.addEventListener('mousedown', (e)=>{ if(!bar.contains(e.target) && !target.contains(e.target)) hideBar(); }, true);
+    })();
+    </script>
+
 </body>
 </html>
