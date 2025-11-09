@@ -2111,7 +2111,6 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
               const mm= String(ts.getMinutes()).padStart(2,'0');
               const file = `wbps-format-runs-${y}${m}${d}-${hh}${mm}.json`;
   
-              // 반드시 FmtIO의 download를 호출(동명이인 함수 충돌 방지)
               window.FmtIO.download(data, file);
   
               if (typeof status === 'function') status('서식을 JSON으로 내보냈습니다.');
@@ -2130,7 +2129,6 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
           }
         });
   
-        // 파일 선택 → 적용
         if (fi && !fi._wbpBound){
           fi._wbpBound = 1;
           fi.addEventListener('change', async (ev)=>{
@@ -2140,7 +2138,6 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
               const text = await f.text();
               const json = JSON.parse(text);
   
-              // 팝업 보호: .pline이 없는 문서에서는 경고
               if (!document.querySelector('.pline')) {
                 alert('이 창에서는 서식 가져오기를 적용할 수 없습니다.\n메인 성경 화면에서 실행하세요.');
                 return;
@@ -2159,7 +2156,6 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
       }
     }
   
-  // 첫 로드 시, 그리고 트리 완성 시 재바인딩
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', safeBindFmtButtons);
   } else {
@@ -2167,6 +2163,4 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   }
   document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
 
-  // ---- 👆 교체/추가 끝 ----
-
-})();   // ✅ 파일 끝에 정확히 이 두 괄호+세미콜론으로 끝나야 함
+})();  
