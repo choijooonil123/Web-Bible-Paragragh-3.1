@@ -2029,38 +2029,97 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
     // 전역 노출
     window.FmtIO = { buildJSON, applyJSON, download, ensure: ensureButtons };
   
-    // 바인딩 (중복 방지)
-    function bind(){
+    // ---- 👇 여기부터 교체/추가 ----
+  
+    // (A) 안전 바인딩 + 위임: 버튼이 어디에 있어도 동작
+    function safeBindFmtButtons(){
+      // 버튼이 없다면 만들어 둔다
       const { ex, im, fi } = ensureButtons();
-      if(ex && !ex._wbpBound){
-        ex._wbpBound = 1;
-        ex.addEventListener('click', ()=>{
-          try{ download(buildJSON()); }
-          catch(e){ console.error('[FmtIO] export failed', e); alert('서식 내보내기에 실패했습니다.'); }
+  
+      // 위임 방식: 문서 어디에서든 id 매칭 시 동작 (중복 방지 플래그)
+      if (!document._wbpFmtDelegated) {
+        document._wbpFmtDelegated = true;
+  
+        document.addEventListener('click', async (e)=>{
+          const exBtn = e.target.closest('#btnFmtExport');
+          const imBtn = e.target.closest('#btnFmtImport');
+  
+          if (exBtn) {
+            e.preventDefault();
+            try {
+              const data = buildJSON();
+  
+              // 팝업/에디터 같은 .pline 없는 화면 보호
+              if (!Array.isArray(data.items) || data.items.length === 0) {
+                alert('내보낼 서식이 없습니다.\n메인 성경 화면(절 라인이 보이는 화면)에서 실행하세요.');
+                return;
+              }
+  
+              const ts = new Date();
+              const y = ts.getFullYear();
+              const m = String(ts.getMonth()+1).padStart(2,'0');
+              const d = String(ts.getDate()).padStart(2,'0');
+              const hh= String(ts.getHours()).padStart(2,'0');
+              const mm= String(ts.getMinutes()).padStart(2,'0');
+              const file = `wbps-format-runs-${y}${m}${d}-${hh}${mm}.json`;
+  
+              // 반드시 FmtIO의 download를 호출(동명이인 함수 충돌 방지)
+              window.FmtIO.download(data, file);
+  
+              if (typeof status === 'function') status('서식을 JSON으로 내보냈습니다.');
+            } catch(err){
+              console.error('[FmtIO] export failed', err);
+              alert('서식 내보내기에 실패했습니다. 콘솔을 확인하세요.');
+            }
+            return;
+          }
+  
+          if (imBtn) {
+            e.preventDefault();
+            const { fi } = ensureButtons();
+            fi && fi.click();
+            return;
+          }
         });
-      }
-      if(im && !im._wbpBound){
-        im._wbpBound = 1;
-        im.addEventListener('click', ()=> fi && fi.click());
-      }
-      if(fi && !fi._wbpBound){
-        fi._wbpBound = 1;
-        fi.addEventListener('change', async (ev)=>{
-          const f = ev.target.files && ev.target.files[0];
-          if(!f) return;
-          try{ applyJSON(JSON.parse(await f.text())); }
-          catch(e){ console.error('[FmtIO] import failed', e); alert('서식 가져오기에 실패했습니다. JSON 파일을 확인하세요.'); }
-          finally{ ev.target.value=''; }
-        });
+  
+        // 파일 선택 → 적용
+        if (fi && !fi._wbpBound){
+          fi._wbpBound = 1;
+          fi.addEventListener('change', async (ev)=>{
+            const f = ev.target.files && ev.target.files[0];
+            if(!f) return;
+            try{
+              const text = await f.text();
+              const json = JSON.parse(text);
+  
+              // 팝업 보호: .pline이 없는 문서에서는 경고
+              if (!document.querySelector('.pline')) {
+                alert('이 창에서는 서식 가져오기를 적용할 수 없습니다.\n메인 성경 화면에서 실행하세요.');
+                return;
+              }
+  
+              applyJSON(json);
+              if (typeof status === 'function') status('서식을 JSON에서 가져와 적용했습니다.');
+            }catch(e){
+              console.error('[FmtIO] import failed', e);
+              alert('서식 가져오기에 실패했습니다. JSON 파일 형식을 확인해 주세요.');
+            } finally {
+              ev.target.value = '';
+            }
+          });
+        }
       }
     }
   
-    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bind);
-    else bind();
+    // 첫 로드 시, 그리고 트리 완성 시 재바인딩
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', safeBindFmtButtons);
+    } else {
+      safeBindFmtButtons();
+    }
+    document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
   
-    // 트리 렌더 완료/갱신 시에도 다시 안전 바인딩
-    document.addEventListener('wbp:treeBuilt', ()=> setTimeout(bind, 0));
-  })();
+    // ---- 👆 교체/추가 끝 ----
 
 })();
 
