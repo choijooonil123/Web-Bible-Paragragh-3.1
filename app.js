@@ -262,8 +262,12 @@ function buildTree(){
       const parWrap = document.createElement('div'); parWrap.className='paras';
       const paras = BIBLE.books[bookName][chap].paras || [];
       paras.forEach((p, idx)=>{
-        const detPara = document.createElement('details'); detPara.className='para';
+        const detPara = document.createElement('details'); 
+        detPara.className='para';
 
+        // ✅ 추가: 내보내기/가져오기용 고정 ID
+        detPara.setAttribute('data-para-id', `${bookName}|${chap}|${p.ref}`);
+        
         const m = String(p.ref||'').match(/^(\d+):(\d+)(?:-(\d+))?$/);
         const v1 = m ? m[2] : '?', v2 = m ? (m[3]||m[2]) : '?';
         const titleText = p.title || p.ref;
@@ -1926,104 +1930,62 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
     }
   });
 
-  /* ===== [FORMAT IO PATCH — DO NOT EDIT BELOW] ===== */
+  /* ===== FmtIO (메인 전역) — 서식 내보내기/가져오기 ===== */
   (function(){
-    // === 0) 프로젝트에 맞춰 최소한만 조정 가능한 상수 (필요 시 아래 2줄만 바꾸면 됩니다) ===
-    const VERSE_SELECTOR = '.pline';   // ✅ 당신의 절 라인 DOM
-    const PARA_ATTR      = 'data-para-id'; // 그대로 두셔도 되고, 없으면 자동으로 index 기반 id 생성
-
-    // === 1) 유틸 ===
+    const VERSE_SELECTOR = '.pline';
+    const PARA_ATTR = 'data-para-id';
+  
     const $  = (sel, root=document) => root.querySelector(sel);
     const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
   
     function ensureButtons(){
-      // header .actions 가 없으면 header 내 아무 곳에 붙임
-      let host = $('.actions', $('header')) || $('header') || document.body;
+      const host = ($('.actions', $('header')) || $('header') || document.body);
+      let ex = $('#btnFmtExport');
+      let im = $('#btnFmtImport');
+      let fi = $('#fmtImportFile');
   
-      // 이미 있으면 재생성 안 함
-      let btnExport = $('#btnFmtExport');
-      let btnImport = $('#btnFmtImport');
-      let fileInput = $('#fmtImportFile');
-  
-      if(!btnExport){
-        btnExport = document.createElement('button');
-        btnExport.id = 'btnFmtExport';
-        btnExport.type = 'button';
-        btnExport.textContent = '서식 내보내기';
-        host.appendChild(btnExport);
-      }
-      if(!btnImport){
-        btnImport = document.createElement('button');
-        btnImport.id = 'btnFmtImport';
-        btnImport.type = 'button';
-        btnImport.textContent = '서식 가져오기';
-        host.appendChild(btnImport);
-      }
-      if(!fileInput){
-        fileInput = document.createElement('input');
-        fileInput.id = 'fmtImportFile';
-        fileInput.type = 'file';
-        fileInput.accept = 'application/json';
-        fileInput.hidden = true;
-        host.appendChild(fileInput);
-      }
-      return { btnExport, btnImport, fileInput };
+      if(!ex){ ex = document.createElement('button'); ex.id='btnFmtExport'; ex.type='button'; ex.textContent='서식 내보내기'; host.appendChild(ex); }
+      if(!im){ im = document.createElement('button'); im.id='btnFmtImport'; im.type='button'; im.textContent='서식 가져오기'; host.appendChild(im); }
+      if(!fi){ fi = document.createElement('input'); fi.id='fmtImportFile'; fi.type='file'; fi.accept='application/json'; fi.hidden=true; host.appendChild(fi); }
+      return { ex, im, fi };
     }
   
-    // === 2) 절 컨테이너 찾기 & 안정적 ID 만들기 ===
     function getVerseNodes(){
-      // 중복 제거
       const set = new Set();
       $$(VERSE_SELECTOR).forEach(n => set.add(n));
       return Array.from(set);
     }
-  
     function nodeId(node){
-      // 1순위: data-vid, 2순위: id, 3순위: para::index
       const byAttr = node.getAttribute('data-vid');
       if(byAttr) return byAttr;
       if(node.id) return node.id;
-  
       const para = node.closest(`[${PARA_ATTR}]`);
       const paraId = para ? para.getAttribute(PARA_ATTR) : 'para';
       const idx = node.parentNode ? Array.prototype.indexOf.call(node.parentNode.children, node) : -1;
       return `${paraId}::${idx}`;
     }
   
-    // === 3) runs 추출/복원 ===
+    function escapeHTML(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
     function extractRunsFrom(node){
       const runs = [];
-      function walk(n, marks){
-        if(n.nodeType === Node.TEXT_NODE){
+      (function walk(n, m){
+        if(n.nodeType===Node.TEXT_NODE){
           const t = n.nodeValue || '';
-          if(t){
-            runs.push({ t, b: !!marks.b, i: !!marks.i, u: !!marks.u, color: marks.color || null });
-          }
+          if(t) runs.push({ t, b:!!m.b, i:!!m.i, u:!!m.u, color: m.color||null });
           return;
         }
-        if(n.nodeType === Node.ELEMENT_NODE){
-          const m = { ...marks };
+        if(n.nodeType===Node.ELEMENT_NODE){
+          const mark = { ...m };
           const tag = n.tagName.toLowerCase();
-  
-          if(tag === 'b' || tag === 'strong') m.b = true;
-          if(tag === 'i' || tag === 'em')    m.i = true;
-          if(tag === 'u')                     m.u = true;
-  
-          // 인라인 color(style)만 취급 — 클래스/상속 색은 복원 불가하므로 내보낼 때 확정 색만
-          const c = n.style && n.style.color;
-          if(c) m.color = c;
-  
-          for(const ch of n.childNodes) walk(ch, m);
+          if(tag==='b'||tag==='strong') mark.b = true;
+          if(tag==='i'||tag==='em')     mark.i = true;
+          if(tag==='u')                 mark.u = true;
+          if(n.style && n.style.color)  mark.color = n.style.color;
+          n.childNodes.forEach(ch=>walk(ch, mark));
         }
-      }
-      walk(node, {});
+      })(node, {});
       return { id: nodeId(node), runs };
     }
-  
-    function escapeHTML(s){
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    }
-  
     function runsToHTML(runs){
       return (runs||[]).map(r=>{
         let t = escapeHTML(r.t);
@@ -2035,224 +1997,71 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
       }).join('');
     }
   
-    // === 4) 공개 API (전역 노출도 함께) ===
     function buildJSON(){
-      const items = getVerseNodes().map(n => extractRunsFrom(n));
       return {
         type: 'format-runs',
         version: 1,
         exportedAt: new Date().toISOString(),
-        items
+        items: getVerseNodes().map(n => extractRunsFrom(n)),
       };
     }
-  
     function applyJSON(data){
       if(!data || data.type!=='format-runs' || !Array.isArray(data.items)) throw new Error('Invalid format JSON');
       const index = new Map();
       getVerseNodes().forEach(n => index.set(nodeId(n), n));
       for(const item of data.items){
         const n = index.get(item.id);
-        if(!n) continue; // 현재 문서에 해당 절이 없을 수 있음
-        n.innerHTML = runsToHTML(item.runs);
+        if(n) n.innerHTML = runsToHTML(item.runs);
       }
     }
-  
     function download(obj, filename){
       const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
+      const url  = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
+      a.href = url;
+      a.download = filename || `formatting-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
+      a.style.display='none';
+      document.body.appendChild(a);
       a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+      setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
     }
   
-    // 전역 노출(디버그/외부 호출용)
+    // 전역 노출
     window.FmtIO = { buildJSON, applyJSON, download, ensure: ensureButtons };
   
-    // === 5) 바인딩 — DOMContentLoaded 보장, 버튼이 없으면 자동 생성 ===
-    // === 5) 바인딩 — DOMContentLoaded 여부와 무관하게 안전하게 초기화 ===
-    function bindFmtButtons(){
-      const { btnExport, btnImport, fileInput } = ensureButtons();
-    
-      btnExport?.addEventListener('click', ()=>{
-        try{
-          const json = buildJSON();
-          download(json, `formatting-${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
-        }catch(err){
-          console.error('[FmtIO] export failed:', err);
-          alert('서식 내보내기에 실패했습니다.');
-        }
-      });
-    
-      btnImport?.addEventListener('click', ()=> fileInput?.click());
-    
-      fileInput?.addEventListener('change', async (ev)=>{
-        const f = ev.target.files && ev.target.files[0];
-        if(!f) return;
-        try{
-          const text = await f.text();
-          const data = JSON.parse(text);
-          applyJSON(data);
-        }catch(err){
-          console.error('[FmtIO] import failed:', err);
-          alert('서식 가져오기에 실패했습니다. JSON 파일을 확인하세요.');
-        }finally{
-          ev.target.value = '';
-        }
-      });
-    }
-    
-    // DOM이 이미 준비됐다면 즉시, 아니면 로드 후에 바인딩
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', bindFmtButtons);
-    } else {
-      bindFmtButtons();
-    }
-
-  })();
-  /* ===== [FORMAT IO PATCH — DO NOT EDIT ABOVE] ===== */
-
-  /* ===== Fmt Toolbar Bootstrap (failsafe) ===== */
-  (function(){
-    function mount(){
-      if (!window.FmtIO || !window.FmtIO.ensure) return;
-  
-      // 1) 버튼들이 없으면 생성
-      const { btnExport, btnImport, fileInput } = window.FmtIO.ensure();
-  
-      // 2) 중복 방지 플래그로 안전 바인딩
-      if (btnExport && !btnExport._wbpBound){
-        btnExport._wbpBound = 1;
-        btnExport.addEventListener('click', ()=> {
-          try{
-            const json = window.FmtIO.buildJSON();
-            window.FmtIO.download(json, `formatting-${new Date().toISOString().replace(/[:.]/g,'-')}.json`);
-          }catch(err){
-            console.error('[FmtIO] export failed:', err);
-            alert('서식 내보내기에 실패했습니다.');
-          }
+    // 바인딩 (중복 방지)
+    function bind(){
+      const { ex, im, fi } = ensureButtons();
+      if(ex && !ex._wbpBound){
+        ex._wbpBound = 1;
+        ex.addEventListener('click', ()=>{
+          try{ download(buildJSON()); }
+          catch(e){ console.error('[FmtIO] export failed', e); alert('서식 내보내기에 실패했습니다.'); }
         });
       }
-  
-      if (btnImport && !btnImport._wbpBound){
-        btnImport._wbpBound = 1;
-        btnImport.addEventListener('click', ()=>{
-          const fi = document.getElementById('fmtImportFile');
-          fi && fi.click();
-        });
+      if(im && !im._wbpBound){
+        im._wbpBound = 1;
+        im.addEventListener('click', ()=> fi && fi.click());
       }
-  
-      const fi = document.getElementById('fmtImportFile');
-      if (fi && !fi._wbpBound){
+      if(fi && !fi._wbpBound){
         fi._wbpBound = 1;
         fi.addEventListener('change', async (ev)=>{
           const f = ev.target.files && ev.target.files[0];
           if(!f) return;
-          try{
-            const text = await f.text();
-            const data = JSON.parse(text);
-            window.FmtIO.applyJSON(data);
-          }catch(err){
-            console.error('[FmtIO] import failed:', err);
-            alert('서식 가져오기에 실패했습니다. JSON 파일을 확인하세요.');
-          }finally{
-            ev.target.value = '';
-          }
+          try{ applyJSON(JSON.parse(await f.text())); }
+          catch(e){ console.error('[FmtIO] import failed', e); alert('서식 가져오기에 실패했습니다. JSON 파일을 확인하세요.'); }
+          finally{ ev.target.value=''; }
         });
       }
     }
   
-    // DOMContentLoaded 전/후 모두 커버
-    if (document.readyState === 'loading'){
-      document.addEventListener('DOMContentLoaded', mount, { once:true });
-    } else {
-      mount();
-    }
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', bind);
+    else bind();
   
-    // header/.actions가 "나중에" 만들어지는 경우까지 커버: 잠깐 재시도 + 옵저버
-    let tries = 0;
-    const tick = setInterval(()=>{
-      mount();
-      if (++tries > 20) clearInterval(tick); // ~4초
-    }, 200);
-  
-    const obs = new MutationObserver(()=> mount());
-    obs.observe(document.documentElement, { subtree:true, childList:true });
-    // 초기 안정화 후 과도한 감시 중단(선택)
-    setTimeout(()=> obs.disconnect(), 6000);
+    // 트리 렌더 완료/갱신 시에도 다시 안전 바인딩
+    document.addEventListener('wbp:treeBuilt', ()=> setTimeout(bind, 0));
   })();
 
-/* ===== Fmt Export/Import 버튼 바인딩 보강 (파일 맨 끝에 추가) ===== */
-(function(){
-  function forceBind(){
-    const ex = document.getElementById('btnFmtExport');
-    const im = document.getElementById('btnFmtImport');
-    const fi = document.getElementById('fmtImportFile');
-
-    // FmtIO 확보(전역 노출)
-    const api = (window.FmtIO || {});
-    const safeDownload = (obj) => {
-      // 파일명: formatting-YYYY-MM-DDTHH-mm-ssZ.json
-      const name = `formatting-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
-      if (api.download) api.download(obj, name);
-      else {
-        // 혹시 모를 예비 루틴
-        const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href     = url; a.download = name; a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
-      }
-    };
-
-    if (ex && !ex._wbpBound){
-      ex._wbpBound = 1;
-      ex.addEventListener('click', ()=>{
-        try{
-          const json = api.buildJSON ? api.buildJSON() : (console.warn('FmtIO.buildJSON 없음'), {type:'format-runs',items:[]});
-          safeDownload(json);
-        }catch(err){
-          console.error('[FmtIO] export failed:', err);
-          alert('서식 내보내기에 실패했습니다.');
-        }
-      });
-    }
-    if (im && !im._wbpBound){
-      im._wbpBound = 1;
-      im.addEventListener('click', ()=> fi && fi.click());
-    }
-    if (fi && !fi._wbpBound){
-      fi._wbpBound = 1;
-      fi.addEventListener('change', async (ev)=>{
-        const f = ev.target.files && ev.target.files[0];
-        if(!f) return;
-        try{
-          const text = await f.text();
-          const data = JSON.parse(text);
-          if (!api.applyJSON) throw new Error('FmtIO.applyJSON 없음');
-          api.applyJSON(data);
-        }catch(err){
-          console.error('[FmtIO] import failed:', err);
-          alert('서식 가져오기에 실패했습니다. JSON 파일을 확인하세요.');
-        }finally{
-          ev.target.value = '';
-        }
-      });
-    }
-  }
-
-  // DOMContentLoaded 이후 1회 시도
-  document.addEventListener('DOMContentLoaded', forceBind);
-
-  // 혹시나 렌더 타이밍이 늦으면 약간 뒤에 한 번 더
-  window.addEventListener('load', ()=> setTimeout(forceBind, 50));
-
-  // 트리 렌더 완료 신호가 있으면 또다시 보강
-  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(forceBind, 0));
-})();
-  
 })();
 
 
