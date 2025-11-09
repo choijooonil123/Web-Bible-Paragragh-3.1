@@ -848,17 +848,25 @@ function openSingleDocEditor(kind){
     images: [], date:''
   };
 
+  // ✅ runs → HTML 변환 주입 (덧대기)
+  // runsToHtml(text, runs) 유틸이 상단에 있어야 합니다. (없다면 추가하세요)
   let bodyHTML = '';
   if (doc && typeof doc.body === 'object' && doc.body.v === 1 && Array.isArray(doc.body.blocks)) {
-    // ✅ 새 포맷(doc v1, runs) → 블록들을 HTML로 변환해 합치기
-    bodyHTML = doc.body.blocks.map(b => runsToHtml(b.text || '', b.runs || [])).join('');
+    // 새 포맷(doc v1, runs) → 각 블록을 HTML로 변환해 이어 붙임
+    bodyHTML = doc.body.blocks
+      .map(b => runsToHtml(b.text || '', b.runs || []))
+      .join('');
+  } else if (typeof doc.body_html === 'string' && doc.body_html.trim()) {
+    // 선택: 호환용 HTML 스냅샷이 있으면 그걸 우선 사용
+    bodyHTML = doc.body_html;
   } else {
-    // ✅ 구 포맷(문자열 HTML) 그대로 사용
+    // 구 포맷(문자열 HTML) 폴백
     bodyHTML = String(doc.body || '');
   }
 
   sermonTitle.value = doc.title || '';
   setBodyHTML(bodyHTML);
+
 
   sermonEditor.dataset.editing = '';
   sermonEditor.dataset.ctxType = kind;
@@ -1400,28 +1408,22 @@ main { height:auto !important; overflow:visible !important; }
       const now = new Date();
       const date = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
 
-      // 🔹 구버전(문자열 HTML)과 신버전(runs 문서) 모두 허용
-      const payloadBody = data.body;
-
-      // 🔸 body가 문자열이면 구버전으로 저장
-      // 🔸 body가 객체(v:1)면 runs 문서로 저장
       arr2[idx] = {
         ...arr2[idx],
         title: data.title,
-        body: payloadBody,  // 문자열 또는 객체 그대로 저장
+        body:  data.body,         // 객체(v1) 또는 문자열(구버전) 허용
+        body_html: data.body_html ?? arr2[idx]?.body_html, // 있으면 보관
         images: data.images || [],
         date
       };
 
-      // 🔹 저장 반영
       map2[CURRENT.paraId] = arr2;
       setSermonMap(map2);
       status('설교가 저장되었습니다.');
-
-      // 🔹 설교 목록 갱신 및 이벤트 해제
       renderSermonList();
       window.removeEventListener('message', onMsg);
     }
+
   }
 
   window.addEventListener('message', onMsg);
@@ -1430,6 +1432,22 @@ main { height:auto !important; overflow:visible !important; }
 /* ===== 팝업 내부 스크립트 ===== */
 function initSermonPopup(win){
   const w = win, d = w.document;
+
+  (function ensureFloatingBar(){
+    const d = win.document;
+    let fb = d.getElementById('floatingBar');
+    if (!fb) {
+      fb = d.createElement('div');
+      fb.id = 'floatingBar';
+      fb.innerHTML = `<button id="btnInsertBibleFloating" class="primary">성경구절</button>`;
+      d.body.appendChild(fb);
+    }
+    const btn = d.getElementById('btnInsertBibleFloating');
+    if (btn) {
+      btn.removeEventListener('click', insertBiblePrompt);
+      btn.addEventListener('click', insertBiblePrompt);
+    }
+  })();
 
     // ===== 중복 제목 입력 숨기기(팝업 한정) =====
   (function removeDuplicateTitle() {
@@ -1516,24 +1534,44 @@ function initSermonPopup(win){
   }
 
   function initBlocksFromMeta(meta){
-    const b = meta.body;
-    if (b && typeof b === 'object' && b.v === 1 && Array.isArray(b.blocks)) {
-      // 이미 runs 문서(v:1)
-      NSTATE.blocks = b.blocks.map(x => ({ ...x }));
-    } else {
-      // 구버전(문자열 HTML) → runs 변환
-      const legacyHtml = (typeof b === 'string') ? b : (meta.body || '');
-      const { text, runs } = htmlToRuns(legacyHtml || '');
-      NSTATE.blocks = [{ id:Nuid(), type:'p', text, runs }];
+    // ① runs 우선
+    if (meta?.body && typeof meta.body === 'object' && meta.body.v === 1 && Array.isArray(meta.body.blocks)) {
+      NSTATE.blocks = meta.body.blocks.map(b => ({
+        id: b.id || Nuid(),
+        type: b.type || 'p',
+        text: b.text || '',
+        runs: Array.isArray(b.runs) ? b.runs : []
+      }));
+      return;
     }
+    // ② body_html 있으면 그걸 사용
+    if (typeof meta?.body_html === 'string' && meta.body_html.trim()) {
+      const { blocks } = htmlToRuns(meta.body_html);
+      NSTATE.blocks = blocks;
+      return;
+    }
+    // ③ 구 body(문자열) 폴백
+    const legacy = (typeof meta?.body === 'string') ? meta.body : '';
+    const { blocks } = htmlToRuns(legacy);
+    NSTATE.blocks = blocks.length ? blocks : [{ id: Nuid(), type:'p', text:'', runs:[] }];
   }
 
-//  function NsaveBlockHTML(block){
-//    const i = NindexById(block.dataset.id);
-//    if(i<0) return;
-//    const content = block.querySelector('.content');
-//    NSTATE.blocks[i].html = content.innerHTML;
-//  }
+  function NsaveBlockHTML(block){
+    const i = NindexById(block.dataset.id);
+    if(i<0) return;
+    const content = block.querySelector('.content');
+    NSTATE.blocks[i].html = content.innerHTML;
+  }
+
+  // 새 runs 저장을 "덧대기"
+  function NsaveBlockRuns(block){
+    const idx = NindexById(block.dataset.id);
+    if (idx < 0) return;
+    const html = block.querySelector('.content')?.innerHTML || '';
+    const { text, runs } = htmlToRuns(html);
+    NSTATE.blocks[idx].text = text;
+    NSTATE.blocks[idx].runs = runs;
+  }
 
   // (신규) HTML → Runs로 변환해 저장
   function NsaveBlock(block){
@@ -1599,8 +1637,10 @@ function initSermonPopup(win){
         if(((e.metaKey||e.ctrlKey)&&e.shiftKey&&e.key.toLowerCase()==='z')||((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='y')){ e.preventDefault(); Nredo(); }
       });
 
+      // 이벤트에는 둘 다 적용 (기존 기능 보존)
       content.addEventListener('input', ()=>{
-        NsaveBlock(block);      // (신) Runs 저장
+        NsaveBlockHTML(block);   // 구방식 유지
+        NsaveBlockRuns(block);   // 신방식 추가
         NscheduleAutosave();
       });
 
@@ -1842,19 +1882,20 @@ function initSermonPopup(win){
 
   // 저장/삭제/닫기/인쇄
   d.getElementById('s').onclick = ()=>{
-    // ① runs 문서로 본문 수집
-    const body = collectRunsDocument();
+    const runsDoc = collectRunsDocument();  // 새 포맷
+    const html    = NblocksToHTML();        // 기존 포맷
 
-    // ② 제목 수집 (neTitle 우선, 없으면 t)
     const title = (d.getElementById('neTitle').value || d.getElementById('t').value || '').trim() || '(제목 없음)';
-
-    // ③ 이미지(필요 시 확장), 현재는 빈 배열 유지
     const images = [];
 
-    // ④ 부모창으로 runs 문서 전달
-    w.opener?.postMessage?.({ type:'sermon-save', title, body, images }, '*');
+    w.opener?.postMessage?.({
+      type: 'sermon-save',
+      title,
+      body: runsDoc,     // 표준 저장: runs
+      body_html: html,   // 호환 스냅샷: HTML (기존 기능 유지)
+      images
+    }, '*');
 
-    // ⑤ 팝업 종료
     w.close();
   };
 
