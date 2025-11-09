@@ -2061,7 +2061,7 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
     }
   
     // 전역 노출(디버그/외부 호출용)
-    window.FmtIO = { buildJSON, applyJSON, download };
+    window.FmtIO = { buildJSON, applyJSON, download, ensure: ensureButtons };
   
     // === 5) 바인딩 — DOMContentLoaded 보장, 버튼이 없으면 자동 생성 ===
     // === 5) 바인딩 — DOMContentLoaded 여부와 무관하게 안전하게 초기화 ===
