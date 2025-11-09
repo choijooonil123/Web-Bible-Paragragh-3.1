@@ -3,7 +3,10 @@
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
 const el = id => document.getElementById(id);
 const treeEl = el('tree'), statusEl = el('status');
-function status(msg){ statusEl.textContent = msg; }
+// 교체 후
+function status(msg){
+  if (statusEl) statusEl.textContent = msg;
+}
 function escapeHtml(s){ return (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
 function stripBlankLines(s){return String(s||'').split(/\r?\n/).filter(l=>l.trim()!=='').join('\n');}
 
@@ -241,8 +244,16 @@ function speakSample(text){
 
 /* --------- Tree --------- */
 function buildTree(){
+  if(!treeEl){
+    console.warn('[WBPS] #tree 요소를 찾지 못했습니다.');
+    return;
+  }
   treeEl.innerHTML = '';
-  if(!BIBLE){ treeEl.innerHTML = '<div class="muted">파일을 찾을 수 없습니다.</div>'; return; }
+  if(!BIBLE){
+    treeEl.innerHTML = '<div class="muted">파일을 찾을 수 없습니다.</div>';
+    return;
+  }
+  // (이하 기존 코드 유지)
 
   for(const bookName of Object.keys(BIBLE.books)){
     const detBook = document.createElement('details');
@@ -437,6 +448,43 @@ function ensureSermonButtons(){
     tb.appendChild(btn);
   });
 }
+
+/* === 트리 클릭 위임: 컨텍스트/설교 버튼 처리 === */
+function bindTreeDelegation(){
+  // 중복 바인딩 방지
+  if (document._wbpsTreeDelegated) return;
+  document._wbpsTreeDelegated = true;
+
+  const t = document.getElementById('tree');
+  if(!t) return; // #tree가 아직 없으면, 아래 이벤트에서 다시 시도
+
+  t.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.btnSummary, .btnUnitCtx, .btnWholeCtx, .btnCommentary, .sermBtn');
+    if (!btn) return;
+
+    const paraEl = e.target.closest('details.para');
+    const titleEl = paraEl?.querySelector('summary .ptitle');
+    if (!paraEl || !titleEl) return;
+
+    // CURRENT 포커싱
+    CURRENT.book    = titleEl.dataset.book;
+    CURRENT.chap    = parseInt(titleEl.dataset.ch, 10);
+    CURRENT.paraIdx = parseInt(titleEl.dataset.idx, 10);
+
+    const para = BIBLE?.books?.[CURRENT.book]?.[CURRENT.chap]?.paras?.[CURRENT.paraIdx];
+    if (!para) return;
+
+    CURRENT.paraId = `${CURRENT.book}|${CURRENT.chap}|${para.ref}`;
+
+    // 버튼별 동작 라우팅
+    if (btn.classList.contains('btnSummary'))    { openSingleDocEditor('summary');    return; }
+    if (btn.classList.contains('btnUnitCtx'))    { openSingleDocEditor('unit');       return; }
+    if (btn.classList.contains('btnWholeCtx'))   { openSingleDocEditor('whole');      return; }
+    if (btn.classList.contains('btnCommentary')) { openSingleDocEditor('commentary'); return; }
+    if (btn.classList.contains('sermBtn'))       { openSermonModal();                 return; }
+  }, { passive:true });
+}
+
 
 /* 🔧 트리 위임 클릭 공용 처리 (유일한 클릭 바인딩) */
 treeEl.addEventListener('click', (e)=>{
@@ -2122,6 +2170,3 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
     // ---- 👆 교체/추가 끝 ----
 
 })();
-
-
-
