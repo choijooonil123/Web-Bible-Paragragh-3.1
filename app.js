@@ -1,4 +1,67 @@
 /* --------- Utils --------- */
+// ✴️ 모든 절문장(data-sid)의 글자서식 정보 수집
+function buildFormattingJSON() {
+  const units = {};
+  document.querySelectorAll('[data-sid]').forEach(el => {
+    const id = el.dataset.sid;
+    const text = el.textContent;
+    const runs = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let offset = 0;
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      const len = node.nodeValue.length;
+      const style = getComputedStyle(node.parentElement);
+      const b = style.fontWeight === 'bold' || parseInt(style.fontWeight) >= 600 ? 1 : 0;
+      const i = style.fontStyle === 'italic' ? 1 : 0;
+      const u = style.textDecorationLine.includes('underline') ? 1 : 0;
+      const c = rgbToHex(style.color);
+      const last = runs[runs.length - 1];
+      if (last && last.b===b && last.i===i && last.u===u && last.c===c && last.e===offset)
+        last.e += len;
+      else
+        runs.push({ s: offset, e: offset+len, b, i, u, c });
+      offset += len;
+    }
+    units[id] = { text, runs };
+  });
+  return { version: 1, updated: new Date().toISOString(), units };
+}
+
+// ✴️ 저장된 JSON을 다시 DOM에 적용 (복원)
+function applyFormattingJSON(data) {
+  for (const [id, item] of Object.entries(data.units)) {
+    const el = document.querySelector(`[data-sid="${id}"]`);
+    if (!el) continue;
+    el.innerHTML = ''; // 초기화
+    let cursor = 0;
+    for (const r of item.runs) {
+      if (r.s > cursor) el.appendChild(document.createTextNode(item.text.slice(cursor, r.s)));
+      const span = document.createElement('span');
+      span.textContent = item.text.slice(r.s, r.e);
+      if (r.b) span.style.fontWeight = 'bold';
+      if (r.i) span.style.fontStyle = 'italic';
+      if (r.u) span.style.textDecoration = 'underline';
+      if (r.c) span.style.color = r.c;
+      el.appendChild(span);
+      cursor = r.e;
+    }
+    if (cursor < item.text.length)
+      el.appendChild(document.createTextNode(item.text.slice(cursor)));
+  }
+}
+
+// ✴️ 색상 변환 보조함수
+function rgbToHex(rgb) {
+  const m = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!m) return '#000000';
+  const r = (+m[1]).toString(16).padStart(2, '0');
+  const g = (+m[2]).toString(16).padStart(2, '0');
+  const b = (+m[3]).toString(16).padStart(2, '0');
+  return `#${r}${g}${b}`;
+}
+
+
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
 const el = id => document.getElementById(id);
 const treeEl = el('tree'), statusEl = el('status');
@@ -376,8 +439,6 @@ function buildTree(){
     detBook.appendChild(chWrap);
     treeEl.appendChild(detBook);
   }
-    // ✅ 바로 여기에 한 줄 추가합니다 👇👇👇
-  document.dispatchEvent(new CustomEvent('wbp:treeBuilt'));
 }
 
 // [PATCH 2 START] 렌더 후에도 설교 버튼 누락 시 자동 보정(클릭 바인딩 없음)
@@ -1815,107 +1876,48 @@ window.addEventListener('load', adjustModalEditorPadding);
 /* ===== 인라인 제목 편집 더미 ===== */
 function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
 
-/* === 절문장 전용 서식 툴바 === */
-(function(){
-  const bar = document.getElementById('vbar');
-  const color = document.getElementById('vcolor');
-  const docEl = document.getElementById('doc');
-  if(!bar || !docEl) return;
+// ✅ 서식 내보내기 / 가져오기 기능 연결
+document.addEventListener('DOMContentLoaded', () => {
 
-  let savedRange = null;
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const btnFmtExport  = $('#btnFmtExport');
+  const btnFmtImport  = $('#btnFmtImport');
+  const fileFmtImport = $('#fmtImportFile');
 
-  function inVerse(){
-    const sel = window.getSelection();
-    if(!sel || sel.rangeCount===0) return false;
-    const c = sel.getRangeAt(0).commonAncestorContainer;
-    const el = (c.nodeType===1 ? c : c.parentElement);
-    return !!(el && docEl.contains(el) && el.closest('.verse'));
-  }
-  function saveSel(){
-    const sel = window.getSelection();
-    if(sel && sel.rangeCount>0) savedRange = sel.getRangeAt(0).cloneRange();
-  }
-  function restoreSel(){
-    if(!savedRange) return false;
-    const sel = window.getSelection();
-    sel.removeAllRanges(); sel.addRange(savedRange);
-    return true;
-  }
-  function selRect(){
-    const sel = window.getSelection();
-    if(!sel || sel.rangeCount===0) return null;
-    const r = sel.getRangeAt(0).cloneRange();
-    let rect = r.getBoundingClientRect();
-    if(!rect || (rect.width===0 && rect.height===0)){
-      const span = document.createElement('span');
-      span.appendChild(document.createTextNode('\u200b'));
-      r.insertNode(span);
-      rect = span.getBoundingClientRect();
-      span.remove();
-    }
-    return rect;
-  }
-  function showBar(){
-    const sel = window.getSelection();
-    if(!sel || sel.isCollapsed || !inVerse()){ hide(); return; }
-    const rect = selRect(); if(!rect){ hide(); return; }
-    bar.style.left = (rect.left + rect.width/2) + 'px';
-    bar.style.top  = rect.top + 'px';
-    bar.hidden = false;
-    saveSel();
-  }
-  function hide(){ bar.hidden = true; }
-
-  bar.addEventListener('mousedown', e=> e.preventDefault());
-  bar.addEventListener('click', e=>{
-    const btn = e.target.closest('button'); if(!btn) return;
-    if(!restoreSel()) return;
-
-    const cmd = btn.dataset.cmd;
-    const act = btn.dataset.act;
-    if(cmd){
-      document.execCommand(cmd,false,null);
-      saveSel(); showBar();
-      return;
-    }
-    if(act==='clearColor'){
-      try{
-        const sel = window.getSelection(); if(!sel || sel.rangeCount===0) return;
-        const range = sel.getRangeAt(0);
-        const frag  = range.cloneContents();
-        const div   = document.createElement('div'); div.appendChild(frag);
-        div.querySelectorAll('span, font').forEach(n=>{
-          if(n.style?.color) n.style.color = '';
-          if(n.hasAttribute?.('color')) n.removeAttribute('color');
-        });
-        range.deleteContents();
-        document.execCommand('insertHTML', false, div.innerHTML);
-      }catch(_){}
-      saveSel(); showBar();
+  // --- 내보내기 ---
+  btnFmtExport?.addEventListener('click', async () => {
+    try {
+      const data = buildFormattingJSON(); // 아래 ③번 함수에서 정의
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const ts = new Date();
+      const name = `formatting-${ts.toISOString().replace(/[:.]/g,'-')}.json`;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      alert('서식 내보내기가 완료되었습니다!');
+    } catch (err) {
+      console.error(err);
+      alert('서식 내보내기에 실패했습니다.');
     }
   });
-  color?.addEventListener('input', ()=>{
-    if(!restoreSel()) return;
-    document.execCommand('foreColor', false, color.value);
-    saveSel(); showBar();
-  });
 
-  document.addEventListener('selectionchange', ()=>{
-    if(inVerse()) showBar(); else hide();
-  });
-  docEl.addEventListener('mouseup', ()=> setTimeout(showBar, 0));
-  docEl.addEventListener('keyup',   ()=> setTimeout(showBar, 0));
-  window.addEventListener('scroll', hide, {passive:true});
-  window.addEventListener('resize', hide);
-
-  window.addEventListener('keydown', (e)=>{
-    if(!inVerse()) return;
-    if(!(e.ctrlKey||e.metaKey)) return;
-    const k=e.key.toLowerCase();
-    if(['b','i','u'].includes(k)){
-      e.preventDefault();
-      document.execCommand(k==='b'?'bold':k==='i'?'italic':'underline',false,null);
-      setTimeout(showBar,0);
+  // --- 가져오기 ---
+  btnFmtImport?.addEventListener('click', () => fileFmtImport?.click());
+  fileFmtImport?.addEventListener('change', async (ev) => {
+    const file = ev.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      applyFormattingJSON(json); // 아래 ③번 함수에서 정의
+      alert('서식 가져오기가 완료되었습니다!');
+    } catch (err) {
+      console.error(err);
+      alert('서식 가져오기에 실패했습니다.');
+    } finally {
+      ev.target.value = ''; // 같은 파일 재선택 허용
     }
   });
-})();
+});
