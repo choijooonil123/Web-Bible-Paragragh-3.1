@@ -38,16 +38,22 @@ function updateParaTitle(book, chap, idx, newTitle){
 }
 
 // JSON 다운로드
-function downloadBibleJSON(){
-  if(!BIBLE){ alert('BIBLE 데이터가 없습니다.'); return; }
-  const blob = new Blob([JSON.stringify(BIBLE, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'bible-paragraphs.json';
-  document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
-  status('수정된 JSON을 다운로드했습니다.');
+// === (교체) 다운로드: 모든 브라우저에서 잘 작동하게 DOM에 붙였다가 제거 ===
+function download(obj, filename){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename || `formatting-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
+  a.style.display = 'none';
+  document.body.appendChild(a);     // ✔ DOM에 붙였다가
+  a.click();                        // ✔ 클릭
+  setTimeout(()=>{
+    document.body.removeChild(a);   // ✔ 제거
+    URL.revokeObjectURL(url);       // ✔ URL 해제
+  }, 0);
 }
+
 
 /* ==== 전체 데이터 백업/복원 ==== */
 const STORAGE_SERMON      = 'wbps.sermons.v4';
@@ -2176,6 +2182,76 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
     setTimeout(()=> obs.disconnect(), 6000);
   })();
 
+/* ===== Fmt Export/Import 버튼 바인딩 보강 (파일 맨 끝에 추가) ===== */
+(function(){
+  function forceBind(){
+    const ex = document.getElementById('btnFmtExport');
+    const im = document.getElementById('btnFmtImport');
+    const fi = document.getElementById('fmtImportFile');
+
+    // FmtIO 확보(전역 노출)
+    const api = (window.FmtIO || {});
+    const safeDownload = (obj) => {
+      // 파일명: formatting-YYYY-MM-DDTHH-mm-ssZ.json
+      const name = `formatting-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
+      if (api.download) api.download(obj, name);
+      else {
+        // 혹시 모를 예비 루틴
+        const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url; a.download = name; a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+      }
+    };
+
+    if (ex && !ex._wbpBound){
+      ex._wbpBound = 1;
+      ex.addEventListener('click', ()=>{
+        try{
+          const json = api.buildJSON ? api.buildJSON() : (console.warn('FmtIO.buildJSON 없음'), {type:'format-runs',items:[]});
+          safeDownload(json);
+        }catch(err){
+          console.error('[FmtIO] export failed:', err);
+          alert('서식 내보내기에 실패했습니다.');
+        }
+      });
+    }
+    if (im && !im._wbpBound){
+      im._wbpBound = 1;
+      im.addEventListener('click', ()=> fi && fi.click());
+    }
+    if (fi && !fi._wbpBound){
+      fi._wbpBound = 1;
+      fi.addEventListener('change', async (ev)=>{
+        const f = ev.target.files && ev.target.files[0];
+        if(!f) return;
+        try{
+          const text = await f.text();
+          const data = JSON.parse(text);
+          if (!api.applyJSON) throw new Error('FmtIO.applyJSON 없음');
+          api.applyJSON(data);
+        }catch(err){
+          console.error('[FmtIO] import failed:', err);
+          alert('서식 가져오기에 실패했습니다. JSON 파일을 확인하세요.');
+        }finally{
+          ev.target.value = '';
+        }
+      });
+    }
+  }
+
+  // DOMContentLoaded 이후 1회 시도
+  document.addEventListener('DOMContentLoaded', forceBind);
+
+  // 혹시나 렌더 타이밍이 늦으면 약간 뒤에 한 번 더
+  window.addEventListener('load', ()=> setTimeout(forceBind, 50));
+
+  // 트리 렌더 완료 신호가 있으면 또다시 보강
+  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(forceBind, 0));
+})();
   
 })();
 
