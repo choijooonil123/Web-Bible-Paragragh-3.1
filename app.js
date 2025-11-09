@@ -1,5 +1,116 @@
 /* --------- Utils --------- */
 
+// ===== Format Import/Export Core =====
+window.FmtIO = window.FmtIO || (function () {
+  function qsa(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
+
+  // ★ 프로젝트 구조에 맞게 '절문장' 선택자를 조합했습니다.
+  //    - .verse, [data-vid] : 절 단위 컨테이너
+  //    - 필요하면 여기만 바꿔도 전체 로직은 그대로 동작합니다.
+  function getVerseNodes() {
+    const set = new Set();
+    qsa('.verse').forEach(n => set.add(n));
+    qsa('[data-vid]').forEach(n => set.add(n));
+    return Array.from(set);
+  }
+
+  // 절 고유 id 생성 규칙
+  function nodeId(node) {
+    return node.getAttribute('data-vid')
+        || node.id
+        || (() => {
+             // para 컨테이너에 data-para-id가 있는 구조라면 보조 키로 만듭니다.
+             const para = node.closest('[data-para-id]');
+             const paraId = para ? para.getAttribute('data-para-id') : 'para';
+             // 동일 절 내부에서 인덱스를 키로
+             const idx = Array.from(node.parentNode ? node.parentNode.children : []).indexOf(node);
+             return `${paraId}::${idx}`;
+           })();
+  }
+
+  // text-runs 추출 (b,i,u, color만)
+  function extractRunsFrom(node) {
+    const runs = [];
+    function walk(n, marks) {
+      if (n.nodeType === Node.TEXT_NODE) {
+        const text = n.nodeValue || '';
+        if (text) {
+          runs.push({ t: text, b: !!marks.b, i: !!marks.i, u: !!marks.u, color: marks.color || null });
+        }
+        return;
+      }
+      if (n.nodeType === Node.ELEMENT_NODE) {
+        const m = { ...marks };
+        const tag = n.tagName.toLowerCase();
+        if (tag === 'b' || tag === 'strong') m.b = true;
+        if (tag === 'i' || tag === 'em') m.i = true;
+        if (tag === 'u') m.u = true;
+        const c = n.style && n.style.color;
+        if (c) m.color = c;
+        Array.from(n.childNodes).forEach(ch => walk(ch, m));
+      }
+    }
+    walk(node, {});
+    return { id: nodeId(node), runs };
+  }
+
+  function escapeHTML(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // runs → HTML 복원
+  function runsToHTML(runs) {
+    return runs.map(r => {
+      let t = escapeHTML(r.t);
+      // 감싸는 순서는 color → b → i → u 어느 것이든 상관없지만
+      // 중첩 균형만 맞추면 됩니다.
+      if (r.color) t = `<span style="color:${r.color}">${t}</span>`;
+      if (r.b) t = `<b>${t}</b>`;
+      if (r.i) t = `<i>${t}</i>`;
+      if (r.u) t = `<u>${t}</u>`;
+      return t;
+    }).join('');
+  }
+
+  // === Public APIs ===
+  function buildJSON() {
+    const items = getVerseNodes().map(n => extractRunsFrom(n));
+    return {
+      type: 'format-runs',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      items
+    };
+  }
+
+  function applyJSON(data) {
+    if (!data || data.type !== 'format-runs' || !Array.isArray(data.items)) {
+      throw new Error('Invalid format JSON');
+    }
+    // 대상 노드 인덱싱
+    const index = new Map();
+    getVerseNodes().forEach(n => index.set(nodeId(n), n));
+
+    data.items.forEach(item => {
+      const node = index.get(item.id);
+      if (!node) return; // 해당 절이 현재 화면에 없을 수도 있음 (무시)
+      node.innerHTML = runsToHTML(item.runs || []);
+    });
+  }
+
+  function download(obj, filename) {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  return { buildJSON, applyJSON, download };
+})();
+
+
 /* ===== Inline Formatting Export/Import (Non-invasive) ===== */
 (() => {
   // 공개 API 네임스페이스
@@ -2050,19 +2161,28 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
     }
   });
 
-  // ===== Export/Import 버튼 바인딩 (Non-invasive) =====
+// ===== Export/Import 버튼 바인딩 =====
 document.addEventListener('DOMContentLoaded', () => {
   const $ = (sel, root = document) => root.querySelector(sel);
   const btnExport = $('#btnFmtExport');
   const btnImport = $('#btnFmtImport');
   const fileInput = $('#fmtImportFile');
 
+  // 디버그 로그 (필요시 확인용)
+  if (!btnExport) console.warn('[FmtIO] btnFmtExport가 DOM에 없습니다.');
+  if (!btnImport) console.warn('[FmtIO] btnFmtImport가 DOM에 없습니다.');
+  if (!fileInput) console.warn('[FmtIO] fmtImportFile이 DOM에 없습니다.');
+
   if (btnExport) {
     btnExport.addEventListener('click', () => {
       try {
+        if (!window.FmtIO || !window.FmtIO.buildJSON) {
+          alert('FmtIO가 초기화되지 않았습니다. app.js 상단의 FmtIO 정의를 확인하세요.');
+          return;
+        }
         const json = window.FmtIO.buildJSON();
         window.FmtIO.download(json, `formatting-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
-        alert('서식 내보내기가 완료되었습니다.');
+        // alert('서식 내보내기가 완료되었습니다.'); // 원하면 알림 유지
       } catch (e) {
         console.error(e);
         alert('서식 내보내기에 실패했습니다.');
@@ -2079,16 +2199,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = await f.text();
         const data = JSON.parse(text);
         window.FmtIO.applyJSON(data);
-        alert('서식 가져오기가 완료되었습니다.');
+        // alert('서식 가져오기가 완료되었습니다.');
       } catch (e) {
         console.error(e);
         alert('서식 가져오기에 실패했습니다.\n파일 형식을 확인해주세요.');
       } finally {
-        ev.target.value = ''; // 같은 파일 다시 선택 가능
+        ev.target.value = ''; // 같은 파일 재선택 가능
       }
     });
   }
 });
+
 
   
 })();
