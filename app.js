@@ -1845,3 +1845,164 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
     if (color){ applyColor(color); updateToolbarPosition(); return; }
   });
 })();
+
+/* ===== [RTE FLOATING TOOLBAR] BEGIN ===== */
+(function installFloatingToolbar(){
+  // 한 번만 설치
+  if (document.getElementById('rteToolbar')) return;
+
+  // 1) 스타일 삽입
+  const css = `
+  #rteToolbar{
+    position: sticky; top: 0; z-index: 5000;
+    display: flex; flex-wrap: wrap; gap: 6px;
+    align-items: center;
+    padding: 8px 10px;
+    background: var(--panel, #161922cc);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--border, #252a36);
+  }
+  #rteToolbar .grp{ display:flex; gap:6px; align-items:center; }
+  #rteToolbar button, #rteToolbar select, #rteToolbar input[type="color"]{
+    height:30px; padding:0 10px; border:1px solid var(--border,#252a36);
+    background: #1c2130; color: var(--text,#e6e8ef); border-radius:8px; cursor:pointer;
+  }
+  #rteToolbar button:hover{ background:#202737; }
+  #rteToolbar .sep{ width:1px; height:22px; background:var(--border,#252a36); margin:0 4px; }
+  #sermonEditor .rte{ --editor-pad-top: 0px; padding-top: var(--editor-pad-top); }
+  `;
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.appendChild(style);
+
+  // 2) 툴바 DOM 생성
+  const el = (id)=>document.getElementById(id);
+  const editor = el('sermonEditor');
+  if(!editor) return;
+
+  const bar = document.createElement('div');
+  bar.id = 'rteToolbar';
+  bar.innerHTML = `
+    <div class="grp">
+      <select id="rteHeading">
+        <option value="P">본문</option>
+        <option value="H1">제목 1</option>
+        <option value="H2">제목 2</option>
+        <option value="H3">제목 3</option>
+        <option value="BLOCKQUOTE">인용</option>
+        <option value="PRE">코드</option>
+      </select>
+      <span class="sep"></span>
+      <button data-cmd="bold"><b>B</b></button>
+      <button data-cmd="italic"><i>I</i></button>
+      <button data-cmd="underline"><u>U</u></button>
+      <button data-cmd="strikeThrough"><s>S</s></button>
+      <span class="sep"></span>
+      <button data-cmd="insertUnorderedList">• 불릿</button>
+      <button data-cmd="insertOrderedList">1. 번호</button>
+      <span class="sep"></span>
+      <input id="rteColor" type="color" title="글자색" />
+      <button id="rteHi" title="형광펜">하이라이트</button>
+      <button id="rteClear" title="서식 제거">서식지우기</button>
+      <span class="sep"></span>
+      <button id="rteLink">링크</button>
+      <button id="rteUnlink">링크해제</button>
+      <span class="sep"></span>
+      <button id="rteUndo">↶ 되돌리기</button>
+      <button id="rteRedo">↷ 다시하기</button>
+    </div>
+  `;
+
+  // 3) 에디터 최상단에 삽입
+  editor.prepend(bar);
+
+  const sermonBody = document.getElementById('sermonBody');
+  const isRTE = ()=> sermonBody && sermonBody.getAttribute('contenteditable') === 'true';
+  const focusBody = ()=>{
+    if(!sermonBody) return;
+    sermonBody.focus({preventScroll:true});
+  };
+
+  function exec(cmd, val=null){
+    if(!isRTE()) return;
+    focusBody();
+    document.execCommand(cmd,false,val);
+  }
+
+  // 헤딩/인용/코드
+  const headingSel = document.getElementById('rteHeading');
+  headingSel.addEventListener('change', ()=>{
+    if(!isRTE()) return;
+    const v = headingSel.value;
+    focusBody();
+    if (v === 'P') document.execCommand('formatBlock', false, 'P');
+    else if (v === 'BLOCKQUOTE') document.execCommand('formatBlock', false, 'BLOCKQUOTE');
+    else if (v === 'PRE') document.execCommand('formatBlock', false, 'PRE');
+    else document.execCommand('formatBlock', false, v); // H1/H2/H3
+  });
+
+  // 굵게/기울임/밑줄/취소선 + 리스트
+  bar.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button[data-cmd]');
+    if(!btn) return;
+    exec(btn.dataset.cmd);
+  });
+
+  // 글자색
+  const colorInp = document.getElementById('rteColor');
+  colorInp.addEventListener('input', ()=>{
+    if(!isRTE()) return;
+    focusBody();
+    document.execCommand('foreColor', false, colorInp.value);
+  });
+
+  // 하이라이트(배경)
+  document.getElementById('rteHi').addEventListener('click', ()=>{
+    if(!isRTE()) return;
+    focusBody();
+    document.execCommand('backColor', false, '#fff175'); // 연한 노란색
+  });
+
+  // 서식 제거
+  document.getElementById('rteClear').addEventListener('click', ()=>{
+    if(!isRTE()) return;
+    focusBody();
+    document.execCommand('removeFormat', false, null);
+    document.execCommand('unlink', false, null);
+    // backColor 투명화는 브라우저마다 다름 → 투명 스팬 삽입 대신 removeFormat로 충분한 경우가 많음
+  });
+
+  // 링크 삽입/해제
+  document.getElementById('rteLink').addEventListener('click', ()=>{
+    if(!isRTE()) return;
+    const url = prompt('링크 URL을 입력하세요');
+    if(!url) return;
+    focusBody();
+    document.execCommand('createLink', false, url);
+  });
+  document.getElementById('rteUnlink').addEventListener('click', ()=>{
+    if(!isRTE()) return;
+    focusBody();
+    document.execCommand('unlink', false, null);
+  });
+
+  // 실행 취소/다시 실행
+  document.getElementById('rteUndo').addEventListener('click', ()=> exec('undo'));
+  document.getElementById('rteRedo').addEventListener('click', ()=> exec('redo'));
+
+  // 툴바 높이만큼 패딩 보정
+  function adjustModalEditorPadding() {
+    const wrap = document.getElementById('rteToolbar');
+    const body = document.querySelector('#sermonEditor .rte');
+    if (!body) return;
+    const h = wrap ? (wrap.offsetHeight || 0) : 0;
+    body.style.setProperty('--editor-pad-top', (h + 0) + 'px');
+  }
+  window.addEventListener('resize', adjustModalEditorPadding);
+  setTimeout(adjustModalEditorPadding, 50);
+
+  // 에디터 열릴 때마다 재보정
+  const mo = new MutationObserver(adjustModalEditorPadding);
+  mo.observe(editor, {subtree:true, childList:true, attributes:true});
+})();
+/* ===== [RTE FLOATING TOOLBAR] END ===== */
