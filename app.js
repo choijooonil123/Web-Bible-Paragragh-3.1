@@ -1,10 +1,180 @@
 /* --------- Utils --------- */
+
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
 const el = id => document.getElementById(id);
 const treeEl = el('tree'), statusEl = el('status');
 function status(msg){ statusEl.textContent = msg; }
 function escapeHtml(s){ return (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
 function stripBlankLines(s){return String(s||'').split(/\r?\n/).filter(l=>l.trim()!=='').join('\n');}
+
+// ===== [RUNS-UTILS] BEGIN: HTML ↔ Runs 공용 유틸 =====
+function escapeHtmlAttr(s){ return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function escapeHtml(s){ const t=document.createElement('div'); t.textContent=String(s); return t.innerHTML; }
+
+/* ==== runs → HTML ==== */
+function runsToHtml(text, runs){
+  const t = String(text || '');
+  const arr = Array.isArray(runs) ? [...runs] : [];
+  arr.sort((a,b)=> (a.s||0) - (b.s||0));
+
+  const esc = s => escapeHtml(s);
+  let out = '';
+  let i = 0;
+
+  for(const r of arr){
+    const s = Math.max(0, Math.min(t.length, r.s|0));
+    const e = Math.max(s, Math.min(t.length, r.e|0));
+    if(s > i) out += esc(t.slice(i, s));
+    const raw = t.slice(s, e);
+    const seg = esc(raw);
+
+    let open = '', close = '';
+    if(r.b) { open += '<strong>'; close = '</strong>'+close; }
+    if(r.i) { open += '<em>';     close = '</em>'+close; }
+    if(r.u) { open += '<u>';      close = '</u>'+close; }
+    if(r.s) { open += '<s>';      close = '</s>'+close; }
+    if(r.color){ open += `<span style="color:${r.color}">`; close = '</span>'+close; }
+    if(r.mark){  open += `<mark>`;                           close = '</mark>'+close; }
+
+    out += open + seg + close;
+    i = e;
+  }
+  if(i < t.length) out += esc(t.slice(i));
+  return out.replace(/\n/g, '<br>');
+}
+
+// Run = { s:number, e:number, b?:1, i?:1, u?:1, s?:1, c?:string, hl?:string, a?:string }
+function mergeRuns(runs){
+  if (!runs || !runs.length) return [];
+  const arr = [...runs].sort((a,b)=> a.s - b.s || a.e - b.e);
+  const out = [];
+  for (const r of arr){
+    const last = out[out.length-1];
+    const same = last && last.b===r.b && last.i===r.i && last.u===r.u && last.s===r.s && last.c===r.c && last.hl===r.hl && last.a===r.a;
+    if (same && last.e >= r.s) last.e = Math.max(last.e, r.e);
+    else out.push({...r});
+  }
+  return out;
+}
+function htmlToRuns(html){
+  const div = document.createElement('div');
+  div.innerHTML = html || '';
+  const runs = [];
+  let text = '';
+  let offset = 0;
+
+  function pushRun(s, e, st){
+    if (e<=s) return;
+    const r = { s, e };
+    if (st.bold) r.b = 1;
+    if (st.italic) r.i = 1;
+    if (st.underline) r.u = 1;
+    if (st.strike) r.s = 1;
+    if (st.color) r.c = st.color;
+    if (st.highlight) r.hl = st.highlight;
+    if (st.href) r.a = st.href;
+    runs.push(r);
+  }
+  function styled(el, base){
+    const st = {...(base||{})};
+    const tag = el.nodeName?.toLowerCase?.() || '';
+    if (tag==='b'||tag==='strong') st.bold = true;
+    if (tag==='i'||tag==='em') st.italic = true;
+    if (tag==='u') st.underline = true;
+    if (tag==='s'||tag==='del') st.strike = true;
+    if (tag==='a'){ const href = el.getAttribute('href'); if (href) st.href = href; }
+    const css = el.getAttribute?.('style')||'';
+    const m1 = css.match(/color\s*:\s*([^;]+)/i);
+    const m2 = css.match(/background(?:-color)?\s*:\s*([^;]+)/i);
+    if (m1) st.color = m1[1].trim();
+    if (m2) st.highlight = m2[1].trim();
+    return st;
+  }
+  function walk(node, st){
+    if (node.nodeType===3){
+      const raw = node.nodeValue||'';
+      if (!raw) return;
+      const start = offset;
+      text += raw;
+      offset += raw.length;
+      if (st.bold||st.italic||st.underline||st.strike||st.color||st.highlight||st.href){
+        pushRun(start, offset, st);
+      }
+      return;
+    }
+    if (node.nodeType!==1) return;
+    const tag = node.nodeName.toLowerCase();
+    if (tag==='sup' && node.classList.contains('pv')) return; // 절번호 저장 제외
+
+    const st2 = styled(node, st||{});
+    node.childNodes.forEach(n=>walk(n, st2));
+    if (['p','div','li','blockquote'].includes(tag)){ text+='\n'; offset+=1; }
+  }
+  walk(div, {});
+  text = text.replace(/\n{2,}$/,'\n');
+  return { text, runs: mergeRuns(runs) };
+}
+
+function runsToHtml(text, runs){
+  text = String(text||'');
+  const marks = [];
+  (runs||[]).forEach(r=>{ marks.push({pos:r.s,open:1,r}); marks.push({pos:r.e,open:0,r}); });
+  marks.sort((a,b)=> a.pos - b.pos || (a.open? -1 : 1));
+  let html = '', i = 0;
+  const stack = [];
+  const openTag = (r)=>{
+    let s = '';
+    const styles = [];
+    if (r.c) styles.push(`color:${r.c}`);
+    if (r.hl) styles.push(`background-color:${r.hl}`);
+    const deco = [];
+    if (r.u) deco.push('underline');
+    if (r.s) deco.push('line-through');
+    if (deco.length) styles.push(`text-decoration:${deco.join(' ')}`);
+    if (r.b) s += '<strong>';
+    if (r.i) s += '<em>';
+    const needSpan = styles.length || r.a;
+    if (needSpan){
+      const tag = r.a ? 'a' : 'span';
+      const attr = [];
+      if (styles.length) attr.push(`style="${styles.join(';')}"`);
+      if (r.a) attr.push(`href="${escapeHtmlAttr(r.a)}"`);
+      s += `<${tag} ${attr.join(' ')}>`;
+    }
+    return s;
+  };
+  const closeTag = (r)=>{
+    let s = '';
+    const needSpan = (r.c||r.hl||r.u||r.s||r.a);
+    if (needSpan) s += (r.a?'</a>':'</span>');
+    if (r.i) s += '</em>';
+    if (r.b) s += '</strong>';
+    return s;
+  };
+
+  for (const m of marks){
+    if (i < m.pos){ html += escapeHtml(text.slice(i, m.pos)); i = m.pos; }
+    if (m.open){
+      html += openTag(m.r);
+      stack.push(m.r);
+    } else {
+      // 안쪽부터 닫고 나머지 다시 열기
+      const bufClose = [];
+      while (stack.length){
+        const top = stack.pop();
+        bufClose.push(closeTag(top));
+        if (top === m.r) break;
+      }
+      // 닫힌 다음 다시 열기
+      const toReopen = stack.slice();
+      toReopen.forEach(rr=>{ html += openTag(rr); });
+      html += bufClose.join('');
+    }
+  }
+  if (i < text.length) html += escapeHtml(text.slice(i));
+  return html;
+}
+// ===== [RUNS-UTILS] END =====
 
 function syncCurrentFromOpen(){
   const openPara = treeEl.querySelector('details.para[open]');
@@ -677,16 +847,18 @@ function openSingleDocEditor(kind){
     body:  (kind==='summary' ? '핵심 내용을 간결하게 요약해 적어주세요.' : ''),
     images: [], date:''
   };
-  modalRef.textContent = `${CURRENT.book} ${CURRENT.chap}장 · ${para.title||para.ref} (${para.ref}) — ${titlePrefix}`;
-  sermonList.innerHTML = '';
-  sermonEditor.style.display = '';
-  sermonEditor.classList.add('context-editor');
-  modalWrap.style.display = 'flex';
-  modalWrap.setAttribute('aria-hidden','false');
-  modalFooterNew.style.display = 'none';
+
+  let bodyHTML = '';
+  if (doc && typeof doc.body === 'object' && doc.body.v === 1 && Array.isArray(doc.body.blocks)) {
+    // ✅ 새 포맷(doc v1, runs) → 블록들을 HTML로 변환해 합치기
+    bodyHTML = doc.body.blocks.map(b => runsToHtml(b.text || '', b.runs || [])).join('');
+  } else {
+    // ✅ 구 포맷(문자열 HTML) 그대로 사용
+    bodyHTML = String(doc.body || '');
+  }
 
   sermonTitle.value = doc.title || '';
-  setBodyHTML(doc.body || '');
+  setBodyHTML(bodyHTML);
 
   sermonEditor.dataset.editing = '';
   sermonEditor.dataset.ctxType = kind;
@@ -1220,35 +1392,38 @@ main { height:auto !important; overflow:visible !important; }
   initSermonPopup(w);
 
   // 부모창 메시지 핸들러 (저장/삭제 반영)
-  const onMsg = (ev) => {
-    const data = ev?.data || {};
-    if (!data.type) return;
-
-    const map2 = getSermonMap();
-    const arr2 = map2[CURRENT.paraId] || [];
+  function onMsg(ev){
+    const data = ev.data;
+    if (!data || !data.type) return;
 
     if (data.type === 'sermon-save') {
-      const now  = new Date();
+      const now = new Date();
       const date = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-      if (arr2[idx]) {
-        arr2[idx] = { ...arr2[idx], title: data.title, body: data.body, images: [], date };
-      }
+
+      // 🔹 구버전(문자열 HTML)과 신버전(runs 문서) 모두 허용
+      const payloadBody = data.body;
+
+      // 🔸 body가 문자열이면 구버전으로 저장
+      // 🔸 body가 객체(v:1)면 runs 문서로 저장
+      arr2[idx] = {
+        ...arr2[idx],
+        title: data.title,
+        body: payloadBody,  // 문자열 또는 객체 그대로 저장
+        images: data.images || [],
+        date
+      };
+
+      // 🔹 저장 반영
       map2[CURRENT.paraId] = arr2;
       setSermonMap(map2);
       status('설교가 저장되었습니다.');
-      renderSermonList();
-      window.removeEventListener('message', onMsg);
-    }
 
-    if (data.type === 'sermon-delete') {
-      if (arr2[idx]) arr2.splice(idx, 1);
-      map2[CURRENT.paraId] = arr2;
-      setSermonMap(map2);
-      status('설교가 삭제되었습니다.');
+      // 🔹 설교 목록 갱신 및 이벤트 해제
       renderSermonList();
       window.removeEventListener('message', onMsg);
     }
-  };
+  }
+
   window.addEventListener('message', onMsg);
 }
 
@@ -1274,7 +1449,6 @@ function initSermonPopup(win){
     });
   })();
 
-
   const $ = id => d.getElementById(id);
   const meta = w.__WBPS_META__ || {};
 
@@ -1294,6 +1468,19 @@ function initSermonPopup(win){
 
   const NSTATE = { blocks: [], history: [], cursor: -1, docId: null };
 
+  // runs 문서 수집 유틸: 현재 NSTATE.blocks → { v:1, blocks:[{id,type,text,runs}] }
+  function collectRunsDocument(){
+    return {
+      v: 1,
+      blocks: (NSTATE.blocks || []).map(b => ({
+        id: b.id,
+        type: b.type || 'p',
+        text: b.text || '',
+        runs: Array.isArray(b.runs) ? b.runs : []
+      }))
+    };
+  }
+
   function NwrapToggle(inner){
     const parts = String(inner||'').split(/<br\s*\/?>/);
     const first = parts.shift() || '토글 제목';
@@ -1304,48 +1491,95 @@ function initSermonPopup(win){
   function NindexById(id){ return NSTATE.blocks.findIndex(b=>b.id===id); }
   function NgetType(block){ return block?.dataset?.type || 'p'; }
 
-  function initBlocksFromHTML(html){
-    if(!html || /^\s*$/.test(html)){
-      NSTATE.blocks=[{id:Nuid(), type:'p', html:'여기에 설교를 작성하세요.'}];
-    }else{
-      NSTATE.blocks=[{id:Nuid(), type:'p', html: html}];
-    }
-  }
-
+  // [RUNS] 렌더: runs → HTML로 변환하여 contenteditable에 넣음
   function Nrender(){
     neRoot.innerHTML = '';
-    for(const b of NSTATE.blocks){
+    for (const b of NSTATE.blocks){
       const el = d.createElement('div');
       el.className = 'editor-block';
-      el.dataset.id = b.id; el.dataset.type = b.type;
-      el.innerHTML = `
-        <div class="handle">⋮⋮</div>
-        <div class="content" contenteditable="true">${b.type==='toggle'? NwrapToggle(b.html) : b.html}</div>
-        <div class="progress" style="width:0"></div>
-      `;
+      el.dataset.id = b.id;
+      el.dataset.type = b.type || 'p';
+
+      if (b.type === 'divider'){
+        el.innerHTML = `<div class="handle">⋮⋮</div><div class="content"><hr></div><div class="progress" style="width:0"></div>`;
+      } else {
+        const html = runsToHtml(b.text||'', b.runs||[]);
+        el.innerHTML = `
+          <div class="handle">⋮⋮</div>
+          <div class="content" contenteditable="true">${html}</div>
+          <div class="progress" style="width:0"></div>
+        `;
+      }
       neRoot.appendChild(el);
     }
     NbindBlockEvents();
   }
 
-  function NsaveBlockHTML(block){
-    const i = NindexById(block.dataset.id);
-    if(i<0) return;
-    const content = block.querySelector('.content');
-    NSTATE.blocks[i].html = content.innerHTML;
+  function initBlocksFromMeta(meta){
+    const b = meta.body;
+    if (b && typeof b === 'object' && b.v === 1 && Array.isArray(b.blocks)) {
+      // 이미 runs 문서(v:1)
+      NSTATE.blocks = b.blocks.map(x => ({ ...x }));
+    } else {
+      // 구버전(문자열 HTML) → runs 변환
+      const legacyHtml = (typeof b === 'string') ? b : (meta.body || '');
+      const { text, runs } = htmlToRuns(legacyHtml || '');
+      NSTATE.blocks = [{ id:Nuid(), type:'p', text, runs }];
+    }
   }
+
+//  function NsaveBlockHTML(block){
+//    const i = NindexById(block.dataset.id);
+//    if(i<0) return;
+//    const content = block.querySelector('.content');
+//    NSTATE.blocks[i].html = content.innerHTML;
+//  }
+
+  // (신규) HTML → Runs로 변환해 저장
+  function NsaveBlock(block){
+    const idx = NindexById(block.dataset.id);
+    if (idx < 0) return;
+
+    // 구분선(divider)은 내용 없음
+    const type = block.dataset.type || 'p';
+    if (type === 'divider') return;
+
+    const html = block.querySelector('.content')?.innerHTML || '';
+    const { text, runs } = htmlToRuns(html); // ← 상단 Runs 유틸 사용
+    NSTATE.blocks[idx].type = type;          // type 유지
+    NSTATE.blocks[idx].text = text;          // 본문 텍스트
+    NSTATE.blocks[idx].runs = runs;          // 서식 Runs
+    // ※ 필요 시 과거 'html' 필드는 제거해도 됩니다.
+  }
+
 
   function NsplitBlock(block){
     const i = NindexById(block.dataset.id); if(i<0) return;
     const sel = w.getSelection(); if(!sel.rangeCount) return;
     const range = sel.getRangeAt(0);
-    const text = block.querySelector('.content').textContent || '';
-    const off  = range.startOffset;
-    const pre  = text.slice(0, off);
-    const post = text.slice(off);
-    NSTATE.blocks[i].html = Nescape(pre);
-    NSTATE.blocks.splice(i+1,0,{id:Nuid(), type:'p', html: Nescape(post||'')});
+    const html = block.querySelector('.content')?.innerHTML || '';
+    // 현재 블록 전체를 Runs로 파싱한 뒤, caret 기준으로 앞/뒤를 텍스트로 나눕니다.
+    const { text, runs } = htmlToRuns(html);
+
+    // 텍스트 기준 오프셋(이미 계산된 off)을 사용해 앞/뒤 텍스트를 자릅니다.
+    const preText  = (text || '').slice(0, off);
+    const postText = (text || '').slice(off);
+
+    // 주의: runs는 범위 분할이 필요하지만, 간단 구현으로는 "양쪽 모두 서식 제거"로 시작해도 OK.
+    // (완벽 split이 필요하면 runs를 앞/뒤로 잘라서 s/e 재계산 로직을 추가하세요.)
+    NSTATE.blocks[i].text = preText;
+    NSTATE.blocks[i].runs = []; // 간이: 앞쪽 서식 제거
+
+    NSTATE.blocks.splice(i+1, 0, {
+      id: Nuid(),
+      type: 'p',
+      text: postText,
+      runs: [] // 간이: 뒤쪽 서식 제거
+    });
+
     Nrender();
+    NscheduleAutosave();
+
     const next = neRoot.querySelector(`.editor-block[data-id="${NSTATE.blocks[i+1].id}"] .content`);
     if(next) { next.focus(); const rr=d.createRange(); rr.selectNodeContents(next); rr.collapse(false); const ss=w.getSelection(); ss.removeAllRanges(); ss.addRange(rr); }
     NpushHistory();
@@ -1365,7 +1599,11 @@ function initSermonPopup(win){
         if(((e.metaKey||e.ctrlKey)&&e.shiftKey&&e.key.toLowerCase()==='z')||((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='y')){ e.preventDefault(); Nredo(); }
       });
 
-      content.addEventListener('input', ()=>{ NsaveBlockHTML(block); NscheduleAutosave(); });
+      content.addEventListener('input', ()=>{
+        NsaveBlock(block);      // (신) Runs 저장
+        NscheduleAutosave();
+      });
+
       content.addEventListener('mouseup', NshowBubbleMaybe);
       content.addEventListener('keyup',   NshowBubbleMaybe);
     });
@@ -1399,6 +1637,13 @@ function initSermonPopup(win){
       const url = w.prompt('링크 URL'); if(url) d.execCommand('createLink', false, url);
     }
     NshowBubbleMaybe(); NscheduleAutosave();
+
+    // 서식 적용 후 현재 블록을 Runs로 저장
+    const curBlock = d.getSelection()?.anchorNode?.parentElement?.closest('.editor-block');
+    if (curBlock) {
+      NsaveBlock(curBlock);
+      NscheduleAutosave();
+    }
   });
 
   const N_SLASH = [
@@ -1449,6 +1694,13 @@ function initSermonPopup(win){
       NSTATE.blocks[idx].type = it.type;
     }
     Nrender(); NscheduleAutosave();
+
+    const cur = neRoot.querySelector(`.editor-block[data-id="${id}"]`);
+    if (cur) {
+      NsaveBlock(cur);
+      NscheduleAutosave();
+    }
+  
   }
 
   function NpushHistory(){ NSTATE.history = NSTATE.history.slice(0, NSTATE.cursor+1); NSTATE.history.push(JSON.stringify(NSTATE.blocks)); NSTATE.cursor = NSTATE.history.length-1; }
@@ -1483,8 +1735,9 @@ function initSermonPopup(win){
   }
 
   (function Ninit(){
-    initBlocksFromHTML(meta.body||'');
-    Nrender(); NpushHistory();
+    initBlocksFromMeta(meta);
+    Nrender();
+    NpushHistory();
     setTimeout(()=>{ const last = d.querySelector('#editorRoot .editor-block:last-child .content'); last && last.focus(); }, 60);
   })();
 
@@ -1589,12 +1842,22 @@ function initSermonPopup(win){
 
   // 저장/삭제/닫기/인쇄
   d.getElementById('s').onclick = ()=>{
-    const html = NblocksToHTML();
+    // ① runs 문서로 본문 수집
+    const body = collectRunsDocument();
+
+    // ② 제목 수집 (neTitle 우선, 없으면 t)
     const title = (d.getElementById('neTitle').value || d.getElementById('t').value || '').trim() || '(제목 없음)';
+
+    // ③ 이미지(필요 시 확장), 현재는 빈 배열 유지
     const images = [];
-    w.opener?.postMessage?.({ type:'sermon-save', title, body: html, images }, '*');
+
+    // ④ 부모창으로 runs 문서 전달
+    w.opener?.postMessage?.({ type:'sermon-save', title, body, images }, '*');
+
+    // ⑤ 팝업 종료
     w.close();
   };
+
   d.getElementById('d').onclick = ()=>{ if(w.confirm('삭제할까요?')){ w.opener?.postMessage?.({ type:'sermon-delete' }, '*'); w.close(); } };
   d.getElementById('x').onclick = ()=> w.close();
   d.getElementById('print').onclick = ()=> w.print();
