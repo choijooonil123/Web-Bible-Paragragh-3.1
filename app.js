@@ -2159,14 +2159,15 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
       }
     }
   
-    // 첫 로드 시, 그리고 트리 완성 시 재바인딩
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', safeBindFmtButtons);
-    } else {
-      safeBindFmtButtons();
-    }
-    document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
-  
-    // ---- 👆 교체/추가 끝 ----
+  // 첫 로드 시, 그리고 트리 완성 시 재바인딩
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', safeBindFmtButtons);
+  } else {
+    safeBindFmtButtons();
+  }
+  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
 
-})();
+  // ---- 👆 교체/추가 끝 ----
+
+})();   // ✅ 파일 끝에 정확히 이 두 괄호+세미콜론으로 끝나야 함
+
