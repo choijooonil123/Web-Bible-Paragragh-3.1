@@ -1,7 +1,3 @@
-/* =======================
- * Web Bible Paragraph 3.0 — Final
- * ======================= */
-
 /* --------- Utils --------- */
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
 const el = id => document.getElementById(id);
