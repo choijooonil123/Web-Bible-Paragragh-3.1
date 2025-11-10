@@ -1,5 +1,183 @@
 /* --------- Utils --------- */
 
+// ===== [FORMAT-PERSIST/RUNS] 위치정보(오프셋) 추출 유틸 BEGIN =====
+function _collectTextAndRuns(rootEl){
+  // DOM을 DFS로 순회하며 순수 텍스트와 서식범위(spans)를 수집
+  const spans = [];
+  let text = '';
+  let offset = 0;
+
+  // 현재 활성화된 서식 스택
+  const active = [];
+
+  function pushSpan(start, end, attrs){
+    if (end <= start) return;
+    // 같은 속성의 연속 구간 병합 여지 있음(간단화를 위해 생략)
+    spans.push({ start, end, attrs: { ...attrs } });
+  }
+
+  function attrsFromEl(el){
+    const a = {};
+    const tag = el.tagName?.toLowerCase?.() || '';
+    if (tag === 'b' || tag === 'strong') a.b = true;
+    if (tag === 'i' || tag === 'em')     a.i = true;
+    if (tag === 'u')                      a.u = true;
+    if (tag === 's' || tag === 'strike')  a.s = true;
+    if (tag === 'mark')                   a.mark = true;
+    // color
+    const color = (el.style && el.style.color) || el.getAttribute?.('color');
+    if (color) a.color = color;
+    return a;
+  }
+
+  function walk(node){
+    if (node.nodeType === Node.TEXT_NODE) {
+      const chunk = node.nodeValue || '';
+      if (chunk.length > 0) {
+        const start = offset;
+        text += chunk;
+        offset += [...chunk].length; // 유니코드 안전
+        // 현재 활성 모든 속성을 이 텍스트 구간에 적용
+        for (const a of active) {
+          pushSpan(start, offset, a);
+        }
+      }
+      return;
+    }
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      // 현재 노드가 부여하는 속성(있으면 스택에 push)
+      const attrs = attrsFromEl(node);
+      const hasAny = Object.keys(attrs).length > 0;
+      if (hasAny) active.push(attrs);
+
+      // 자식 순회
+      for (let child = node.firstChild; child; child = child.nextSibling) {
+        walk(child);
+      }
+
+      // 스택 pop
+      if (hasAny) active.pop();
+    }
+    // 그 외 노드타입은 무시
+  }
+
+  walk(rootEl);
+  return { text, spans };
+}
+
+function _wrapRunsToHTML(text, spans){
+  // runs를 이용해 최소 래퍼로 HTML 재구성 (단순 구현)
+  // 전략: 문자 단위로 스캔하면서 "현재 적용중인 attrs 집합"이 바뀔 때 래퍼를 열고 닫음
+  const cps = [...text]; // 코드포인트 배열
+  const open = []; // 현재 열려 있는 래퍼 스택 (attrs)
+  const out = [];
+
+  function attrsKey(a){ return JSON.stringify(a||{}); }
+
+  // 각 오프셋에서 시작/끝나는 runs 인덱스 준비
+  const starts = new Map(), ends = new Map();
+  spans.forEach(sp=>{
+    (starts.get(sp.start) || starts.set(sp.start, [])).get(sp.start).push(sp);
+  });
+  spans.forEach(sp=>{
+    (ends.get(sp.end) || ends.set(sp.end, [])).get(sp.end).push(sp);
+  });
+
+  // Map 빌드 보정 (위에서 set().get()은 다소 장황하니 보정)
+  function addMapArr(map, k, v){
+    if(!map.has(k)) map.set(k, []);
+    map.get(k).push(v);
+  }
+  const s2 = new Map(), e2 = new Map();
+  spans.forEach(sp=> addMapArr(s2, sp.start, sp));
+  spans.forEach(sp=> addMapArr(e2, sp.end, sp));
+
+  // 도움: attrs → 오픈 태그 문자열
+  function openTags(a){
+    const t = [];
+    if(a.b) t.push('<b>');
+    if(a.i) t.push('<i>');
+    if(a.u) t.push('<u>');
+    if(a.s) t.push('<s>');
+    if(a.mark) t.push('<mark>');
+    if(a.color) t.push(`<span style="color:${a.color}">`);
+    return t.join('');
+  }
+  // 도움: attrs → 클로즈 태그 문자열 (역순)
+  function closeTags(a){
+    const t = [];
+    if(a.color) t.push('</span>');
+    if(a.mark) t.push('</mark>');
+    if(a.s) t.push('</s>');
+    if(a.u) t.push('</u>');
+    if(a.i) t.push('</i>');
+    if(a.b) t.push('</b>');
+    return t.join('');
+  }
+
+  // 현재 활성 attrs 집합을 단일 attrs로 합치기 (겹침 단순화)
+  function mergeActive(){
+    const m = {};
+    for(const a of open){
+      if(a.b) m.b = true;
+      if(a.i) m.i = true;
+      if(a.u) m.u = true;
+      if(a.s) m.s = true;
+      if(a.mark) m.mark = true;
+      if(a.color) m.color = a.color; // 마지막 color 우선
+    }
+    return m;
+  }
+
+  for(let i=0;i<=cps.length;i++){
+    // i 위치에서 끝나는 것들 먼저 닫기
+    if(e2.has(i)){
+      // 끝나는 spans의 attrs를 pop (단순히 스택에서 일치하는 하나 제거)
+      // 정확한 중첩 순서 유지까지는 복잡하므로, 여기서는 전체를 닫고 다시 여는 전략 사용
+      const toEnd = e2.get(i);
+      if(toEnd.length){
+        const cur = mergeActive();
+        out.push(closeTags(cur));
+        open.length = 0;
+      }
+    }
+    // i 위치에서 시작하는 것들 열기
+    if(s2.has(i)){
+      const toStart = s2.get(i);
+      if(toStart.length){
+        // 시작 구간 전체 합쳐서 한 번에 오픈(간단화)
+        const merged = {};
+        for(const sp of toStart){
+          const a = sp.attrs||{};
+          if(a.b) merged.b = true;
+          if(a.i) merged.i = true;
+          if(a.u) merged.u = true;
+          if(a.s) merged.s = true;
+          if(a.mark) merged.mark = true;
+          if(a.color) merged.color = a.color;
+          open.push(a);
+        }
+        out.push(openTags(merged));
+      }
+    }
+    // 문자 출력 (마지막 루프 i==len에서는 문자 없음)
+    if(i < cps.length){
+      const ch = cps[i]
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;');
+      out.push(ch);
+    }
+  }
+  // 남은 것 닫기
+  if(open.length){
+    const cur = mergeActive();
+    out.push(closeTags(cur));
+  }
+  return out.join('');
+}
+// ===== [FORMAT-PERSIST/RUNS] 위치정보(오프셋) 추출 유틸 END =====
+
 // ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage) BEGIN =====
 const FMT_NS = 'WBP3_FMT';
 
@@ -29,16 +207,26 @@ function saveFormatForOpenPara(){
   const ctx = getOpenParaKeyAndEls();
   if(!ctx){ alert('열려있는 단락을 찾을 수 없습니다.'); return; }
 
-  // 절문장 인덱스별 HTML 스냅샷(서식 포함) 저장
+  // 절문장 단위: innerHTML 스냅샷 + runs 동시 저장 (v:2)
+  const lines = ctx.lineEls.map(el => {
+    const root = el.matches('.content') ? el : el.querySelector('.content') || el;
+    const { text, spans } = _collectTextAndRuns(root);
+    return {
+      html: el.innerHTML,   // 기존 스냅샷 (백업/하위호환)
+      text,                 // 순수 텍스트
+      spans                 // 위치정보 포함 서식 runs
+    };
+  });
+
   const payload = {
-    v: 1,
+    v: 2,
     savedAt: Date.now(),
-    lines: ctx.lineEls.map(el => el.innerHTML)
+    lines
   };
 
   try{
     localStorage.setItem(ctx.key, JSON.stringify(payload));
-    status && status('서식 저장 완료'); // 기존 status() 유틸 재사용
+    status && status('서식 저장 완료(v2: 위치정보 포함)');
   }catch(e){
     console.error(e);
     alert('서식 저장 중 오류가 발생했습니다.');
@@ -54,22 +242,35 @@ function restoreFormatForOpenPara(){
 
   let data;
   try{ data = JSON.parse(raw); }catch(e){
-    console.error(e);
-    alert('저장된 서식 데이터를 읽는 중 오류가 발생했습니다.');
-    return;
+    console.error(e); alert('저장된 서식 데이터를 읽는 중 오류가 발생했습니다.'); return;
   }
   if(!data || !Array.isArray(data.lines)){
-    alert('저장된 서식 형식이 올바르지 않습니다.');
-    return;
+    alert('저장된 서식 형식이 올바르지 않습니다.'); return;
   }
 
-  // 저장 당시 라인 수와 현재 라인 수가 다를 수 있음 → 가능한 범위만 복원
+  const USE_RUNS_ON_RESTORE = false; // ← 필요 시 true로 바꾸면 위치정보 기반 정밀 복원
+
   const n = Math.min(ctx.lineEls.length, data.lines.length);
   for(let i=0;i<n;i++){
-    ctx.lineEls[i].innerHTML = data.lines[i];
+    const lineEl = ctx.lineEls[i];
+    const rec = data.lines[i];
+
+    if(!USE_RUNS_ON_RESTORE || !rec || !rec.text || !Array.isArray(rec.spans)){
+      // 기본(안전) 경로: HTML 스냅샷 사용 (v:1과 동일 동작)
+      const html = (typeof rec === 'string') ? rec : (rec?.html || '');
+      if(html) lineEl.innerHTML = html;
+      continue;
+    }
+
+    // runs 정밀 복원 경로
+    const rebuilt = _wrapRunsToHTML(rec.text, rec.spans);
+    // .content가 있으면 내부만 교체, 없으면 자기 자신
+    const root = lineEl.matches('.content') ? lineEl : (lineEl.querySelector('.content') || lineEl);
+    root.innerHTML = rebuilt;
   }
-  status && status('서식 복원 완료');
+  status && status('서식 복원 완료' + (USE_RUNS_ON_RESTORE ? '(runs)' : '(html)'));
 }
+
 // ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage) END =====
 
 // ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 BEGIN =====
