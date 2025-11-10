@@ -11,18 +11,27 @@ function escapeHtml(s){ return (s||'').replaceAll('&','&amp;').replaceAll('<','&
 function stripBlankLines(s){return String(s||'').split(/\r?\n/).filter(l=>l.trim()!=='').join('\n');}
 
 // ⬇️ Utils 근처, 전역에 추가
+// ⬇️ Utils 근처, 전역에 추가
 function downloadBibleJSON() {
-  if (!BIBLE) { alert('성경 데이터가 아직 로드되지 않았습니다.'); return; }
   try {
+    const data = (typeof BIBLE === 'object' && BIBLE) ? BIBLE : null;
+    if (!data) { alert('성경 데이터(BIBLE)가 아직 로드되지 않았습니다.'); return; }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
     const ts = new Date();
-    const file = `bible-paragraphs-export-${ts.getFullYear()}${String(ts.getMonth()+1).padStart(2,'0')}${String(ts.getDate()).padStart(2,'0')}-${String(ts.getHours()).padStart(2,'0')}${String(ts.getMinutes()).padStart(2,'0')}.json`;
-    download(BIBLE, file);  // ← 이미 있으신 download(obj, filename) 사용
-    if (typeof status === 'function') status('성경 JSON을 내보냈습니다.');
+    const tss = `${ts.getFullYear()}${String(ts.getMonth()+1).padStart(2,'0')}${String(ts.getDate()).padStart(2,'0')}-${String(ts.getHours()).padStart(2,'0')}${String(ts.getMinutes()).padStart(2,'0')}`;
+    a.href = URL.createObjectURL(blob);
+    a.download = `bible-paragraphs-${tss}.json`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    if (typeof status === 'function') status('성경 JSON을 다운로드했습니다.');
   } catch (e) {
     console.error(e);
-    alert('성경 JSON 내보내기에 실패했습니다.');
+    alert('다운로드 중 오류가 발생했습니다.');
   }
 }
+
 
 
 function syncCurrentFromOpen(){
