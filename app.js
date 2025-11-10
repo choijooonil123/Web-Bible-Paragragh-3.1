@@ -2117,3 +2117,56 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
 })();
 
 })();
+
+/* === 3.1 최종 수정: 단락별 서식복원 버튼 === */
+(function(){
+  function metaFromParaEl(paraEl){
+    const t = paraEl.querySelector('summary .ptitle');
+    if(!t) return null;
+    return { book:t.dataset.book, ch:+t.dataset.ch, idx:+t.dataset.idx };
+  }
+
+  function restoreFormattingForPara(paraEl){
+    const m = metaFromParaEl(paraEl);
+    if(!m) return alert('단락 정보를 찾을 수 없습니다.');
+    const para = window.BIBLE?.books?.[m.book]?.[m.ch]?.paras?.[m.idx];
+    if(!para) return alert('성경 본문 데이터가 없습니다.');
+
+    const prefix = `${m.book}|${m.ch}|${para.ref}|v`;
+    const fmtMap = window.WBP_FMT?.map || {};
+    let count = 0;
+    paraEl.querySelectorAll('.pline').forEach(line=>{
+      const v = line.dataset.verse;
+      const html = fmtMap[`${prefix}${v}`];
+      if(html){ line.innerHTML = html; count++; }
+    });
+    alert(`${m.book} ${m.ch}장 ${m.idx+1}번째 단락의 서식 ${count}개 복원 완료.`);
+  }
+
+  function addRestoreBtn(tb, paraEl){
+    if(tb.querySelector('.btnRestoreFmt')) return;
+    const btn = document.createElement('button');
+    btn.className = 'btnRestoreFmt';
+    btn.textContent = '서식복원';
+    btn.title = '이 단락의 서식정보를 LocalStorage에서 복원합니다.';
+    btn.style.background = '#224466';
+    btn.style.color = '#fff';
+    btn.style.border = '1px solid #5577aa';
+    btn.style.borderRadius = '8px';
+    btn.style.padding = '6px 10px';
+    btn.addEventListener('click', ()=> restoreFormattingForPara(paraEl));
+    tb.appendChild(btn);
+  }
+
+  function sweep(){
+    const root = document.getElementById('tree');
+    if(!root) return;
+    root.querySelectorAll('details.para').forEach(paraEl=>{
+      const tb = paraEl.querySelector('.ptoolbar');
+      if(tb) addRestoreBtn(tb, paraEl);
+    });
+  }
+
+  // ✅ buildTree 완료 후 단락들이 생성되면 버튼 삽입
+  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(sweep, 100));
+})();
