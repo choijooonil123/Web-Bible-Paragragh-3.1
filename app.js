@@ -1,3 +1,4 @@
+
 /* --------- Utils --------- */
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
 const el = id => document.getElementById(id);
@@ -49,6 +50,71 @@ function downloadBibleJSON(){
 }
 
 /* ==== 전체 데이터 백업/복원 ==== */
+
+/* ==== 전체 데이터 백업/복원 ==== */
+/* === 3.1 추가: 절문장 서식정보 저장/복원 기능 === */
+const STORAGE_FMTMAP = 'wbps.fmtmap.v1';
+let FORMAT_MAP = {};
+
+/* --- 저장 및 로드 --- */
+function saveFormatMap() {
+  try { localStorage.setItem(STORAGE_FMTMAP, JSON.stringify(FORMAT_MAP)); }
+  catch (e) { console.warn('saveFormatMap error', e); }
+}
+function loadFormatMap() {
+  try { FORMAT_MAP = JSON.parse(localStorage.getItem(STORAGE_FMTMAP) || '{}'); }
+  catch (e) { FORMAT_MAP = {}; }
+}
+
+/* --- 내보내기 / 가져오기 --- */
+function exportFormatMap() {
+  const data = JSON.stringify(FORMAT_MAP, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const a = document.createElement('a');
+  const t = new Date();
+  const name = `format-backup-${t.getFullYear()}${String(t.getMonth()+1).padStart(2,'0')}${String(t.getDate()).padStart(2,'0')}.json`;
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  status('서식 정보를 내보냈습니다.');
+}
+async function importFormatMap(file) {
+  const text = await file.text();
+  try {
+    FORMAT_MAP = JSON.parse(text) || {};
+    saveFormatMap();
+    alert('서식정보 복원 완료. 새로고침 후 적용됩니다.');
+  } catch (err) {
+    alert('JSON 형식 오류');
+  }
+}
+
+/* --- 적용 함수 --- */
+function applyFormatToVerse(paraEl, verse, fmtArr) {
+  const line = paraEl.querySelector(`.pline[data-verse="${verse}"]`);
+  if (!line) return;
+  const text = line.textContent;
+  let html = '';
+  let cursor = 0;
+  for (const f of fmtArr) {
+    const s = Math.max(0, Math.min(text.length, f.start|0));
+    const e = Math.max(s, Math.min(text.length, f.end|0));
+    const attrs = f.attrs || {};
+    html += escapeHtml(text.slice(cursor, s));
+    let open='', close='';
+    if (attrs.b) { open += '<b>'; close = '</b>'+close; }
+    if (attrs.i) { open += '<i>'; close = '</i>'+close; }
+    if (attrs.u) { open += '<u>'; close = '</u>'+close; }
+    if (attrs.color) { open += `<span style="color:${attrs.color}">`; close = '</span>'+close; }
+    html += open + escapeHtml(text.slice(s,e)) + close;
+    cursor = e;
+  }
+  html += escapeHtml(text.slice(cursor));
+  line.innerHTML = `<sup class="pv">${verse}</sup>` + html;
+}
+
+
 const STORAGE_SERMON      = 'wbps.sermons.v4';
 const STORAGE_UNIT_CTX    = 'wbps.ctx.unit.v1';
 const STORAGE_WHOLE_CTX   = 'wbps.ctx.whole.v1';
@@ -130,6 +196,29 @@ let EDITOR_READER = { playing:false, u:null, synth:window.speechSynthesis||null 
     const f = e.target.files?.[0]; if(!f) return;
     importAllData(f).finally(()=>{ e.target.value=''; });
   });
+
+  /* === 3.1 추가: 서식 내보내기/가져오기 버튼 === */
+  const fmtExport = document.createElement('button');
+  fmtExport.textContent = '서식 내보내기';
+  fmtExport.onclick = exportFormatMap;
+
+  const fmtImport = document.createElement('button');
+  fmtImport.textContent = '서식 가져오기';
+
+  const fmtFile = document.createElement('input');
+  fmtFile.type = 'file';
+  fmtFile.accept = 'application/json';
+  fmtFile.style.display = 'none';
+
+  fmtImport.onclick = () => fmtFile.click();
+  fmtFile.onchange = e => {
+    const f = e.target.files[0];
+    if (f) importFormatMap(f);
+    e.target.value = '';
+  };
+
+  document.querySelector('header')?.append(fmtExport, fmtImport, fmtFile);
+
 })();
 
 async function tryFetchJSON(path){ const res = await fetch(path, {cache:'no-store'}); if(!res.ok) throw 0; return await res.json(); }
@@ -376,6 +465,18 @@ function buildTree(){
     detBook.appendChild(chWrap);
     treeEl.appendChild(detBook);
   }
+
+  /* === 3.1 추가: 트리 생성 후 절문장 서식 복원 === */
+  loadFormatMap();
+  for (const [pid, data] of Object.entries(FORMAT_MAP)) {
+    const [book, chap, idx] = pid.split('|');
+    const paraEl = treeEl.querySelector(`details.para[data-book="${book}"][data-ch="${chap}"][data-idx="${idx}"]`);
+    if (!paraEl) continue;
+    for (const verseKey of Object.keys(data)) {
+      applyFormatToVerse(paraEl, verseKey, data[verseKey]);
+    }
+  }
+
     // ✅ 바로 여기에 한 줄 추가합니다 👇👇👇
   document.dispatchEvent(new CustomEvent('wbp:treeBuilt'));
 }
@@ -924,6 +1025,32 @@ function execFmt(cmd){
     sermonBody.focus({preventScroll:true});
     document.execCommand(cmd,false,null);
   }
+
+  // === 3.1 추가: 현재 절문장 서식정보를 저장 ===
+  try {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const node = sel.anchorNode;
+    const verseEl = node?.closest?.('.pline');
+    const paraEl = node?.closest?.('details.para');
+    if (!verseEl || !paraEl) return;
+    const verse = verseEl.dataset.verse;
+    const book = paraEl.dataset.book;
+    const ch = paraEl.dataset.ch;
+    const idx = paraEl.dataset.idx;
+    const text = verseEl.textContent || '';
+    const range = sel.getRangeAt(0);
+    const start = 0;
+    const end = text.length;
+    const attrs = { [cmd]: true };
+
+    const pid = `${book}|${ch}|${idx}`;
+    if (!FORMAT_MAP[pid]) FORMAT_MAP[pid] = {};
+    if (!FORMAT_MAP[pid][verse]) FORMAT_MAP[pid][verse] = [];
+    FORMAT_MAP[pid][verse].push({ start, end, attrs });
+    saveFormatMap();
+  } catch (_) {}
+
 }
 
 /* --------- Editor TTS --------- */
