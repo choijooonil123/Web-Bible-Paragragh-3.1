@@ -2215,4 +2215,38 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
       setTimeout(showBar,0);
     }
   });
+
+// ===== [FORMAT-PERSIST INSPECTOR] 저장된 서식정보 콘솔 확인 도우미 =====
+function showSavedFormatInfo(){
+  const t = document.querySelector('details.para[open] summary .ptitle');
+  if(!t){ console.warn('⚠️ 열려있는 단락이 없습니다. 먼저 단락을 여세요.'); return; }
+
+  const key = `WBP3_FMT:${t.dataset.book}:${t.dataset.ch}:${t.dataset.idx}`;
+  const raw = localStorage.getItem(key);
+  if(!raw){ console.warn('❌ 저장된 서식 데이터가 없습니다.', key); return; }
+
+  try {
+    const d = JSON.parse(raw);
+    console.log('✅ 저장 키:', key);
+    console.log('버전(v):', d.v, '저장시각:', new Date(d.savedAt).toLocaleString());
+    console.log('절문장 수:', d.lines?.length || 0);
+    if(d.lines && d.lines.length){
+      console.log('--- 첫 번째 절문장 데이터 ---');
+      const L = d.lines[0];
+      console.log('HTML 스냅샷:', L.html?.slice(0,150) + '...');
+      console.log('텍스트:', L.text?.slice(0,100));
+      console.log('spans(서식 runs):', L.spans?.slice(0,10));
+    }
+  }catch(e){
+    console.error('⚠️ 저장 데이터 파싱 오류:', e);
+  }
+}
+
+function showAllSavedFormatKeys(){
+  const keys = Object.keys(localStorage).filter(k=>k.startsWith('WBP3_FMT:'));
+  if(keys.length===0) return console.warn('⚠️ 저장된 서식 키가 없습니다.');
+  console.log('🗂️ 저장된 모든 서식 키 목록:');
+  keys.forEach(k=> console.log('  ',k));
+}
+
 })();
