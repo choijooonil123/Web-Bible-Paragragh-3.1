@@ -74,14 +74,39 @@ function restoreFormatForOpenPara(){
 
 // ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 BEGIN =====
 function ensureFormatButtons(){
-  // 설교버튼 옆(header 안)에 붙이기
-  const sermonBtn = document.getElementById('btnSermon');
-  if(!sermonBtn) return; // 설교버튼 없으면 종료 (오류 방지)
+  const doc = document;
 
-  // 이미 생성된 경우 중복 생성 방지
-  if(document.getElementById('btnFmtSave')) return;
+  // 1) 앵커(설교 버튼) 탐색: 여러 후보 + 텍스트 매칭
+  let anchor =
+    doc.getElementById('btnSermon') ||
+    doc.querySelector('#sermonBtn, #btn-sermon, [data-action="sermon"], [data-role="sermon"]');
 
-  const btnSave = document.createElement('button');
+  if(!anchor){
+    const btns = Array.from(doc.querySelectorAll('header button, .toolbar button, button'));
+    anchor = btns.find(b => (b.textContent || '').trim() === '설교') || null;
+  }
+
+  // 2) 호스트(붙일 자리) 확보: 설교버튼 부모 > header > statusEl 부모 > body
+  const headerEl = doc.querySelector('header') || null;
+  const host = (anchor && anchor.parentElement)
+            || headerEl
+            || (typeof statusEl !== 'undefined' && statusEl && statusEl.parentElement)
+            || doc.body;
+
+  // 3) 이미 버튼 있으면 "위치만 보정"하고 종료
+  const existSave = doc.getElementById('btnFmtSave');
+  const existLoad = doc.getElementById('btnFmtLoad');
+  if (existSave && existLoad) {
+    // 설교 버튼이 이제 생겼다면, 설교 버튼 바로 뒤로 재배치
+    if (anchor && existSave.previousElementSibling !== anchor) {
+      anchor.insertAdjacentElement('afterend', existSave);
+      existSave.insertAdjacentElement('afterend', existLoad);
+    }
+    return;
+  }
+
+  // 4) 새로 생성
+  const btnSave = doc.createElement('button');
   btnSave.id = 'btnFmtSave';
   btnSave.type = 'button';
   btnSave.textContent = '서식저장';
@@ -93,7 +118,7 @@ function ensureFormatButtons(){
   btnSave.style.borderRadius = '4px';
   btnSave.style.cursor = 'pointer';
 
-  const btnLoad = document.createElement('button');
+  const btnLoad = doc.createElement('button');
   btnLoad.id = 'btnFmtLoad';
   btnLoad.type = 'button';
   btnLoad.textContent = '서식회복';
@@ -105,11 +130,31 @@ function ensureFormatButtons(){
   btnLoad.style.borderRadius = '4px';
   btnLoad.style.cursor = 'pointer';
 
-  // 설교버튼 바로 뒤에 삽입
-  sermonBtn.insertAdjacentElement('afterend', btnSave);
-  btnSave.insertAdjacentElement('afterend', btnLoad);
+  // 5) 우선순위: 설교버튼 뒤 → header 끝 → host 끝 → (최후) 우하단 플로팅
+  if (anchor) {
+    anchor.insertAdjacentElement('afterend', btnSave);
+    btnSave.insertAdjacentElement('afterend', btnLoad);
+  } else if (headerEl) {
+    headerEl.appendChild(btnSave);
+    headerEl.appendChild(btnLoad);
+  } else if (host) {
+    host.appendChild(btnSave);
+    host.appendChild(btnLoad);
+  } else {
+    // 최후: 플로팅
+    const float = doc.createElement('div');
+    float.style.position = 'fixed';
+    float.style.right = '12px';
+    float.style.bottom = '12px';
+    float.style.display = 'flex';
+    float.style.gap = '8px';
+    float.style.zIndex = '99999';
+    float.appendChild(btnSave);
+    float.appendChild(btnLoad);
+    doc.body.appendChild(float);
+  }
 
-  // 클릭 이벤트 연결
+  // 6) 클릭 이벤트 연결 (이미 구현된 저장/복원 함수 사용)
   btnSave.addEventListener('click', saveFormatForOpenPara);
   btnLoad.addEventListener('click', restoreFormatForOpenPara);
 }
