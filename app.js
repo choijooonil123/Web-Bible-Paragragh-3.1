@@ -1,4 +1,3 @@
-
 /* --------- Utils --------- */
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
 const el = id => document.getElementById(id);
@@ -50,107 +49,6 @@ function downloadBibleJSON(){
 }
 
 /* ==== 전체 데이터 백업/복원 ==== */
-
-/* ==== 절문장 서식 저장소 (v1) ==== */
-
-const STORAGE_FORMATS     = 'wbps.formats.v1'; // 🔸 절문장 서식 저장소
-
-const STORAGE_FMT = 'wbps.fmt.v1';
-let WBP_FMT = { map: {} };
-
-function loadFmt(){
-  try{
-    const j = JSON.parse(localStorage.getItem(STORAGE_FMT) || '{"map":{}}');
-    if(!j || typeof j !== 'object' || !j.map) throw 0;
-    WBP_FMT = { map: j.map };
-  }catch(_){
-    WBP_FMT = { map: {} };
-  }
-}
-function saveFmt(){
-  localStorage.setItem(STORAGE_FMT, JSON.stringify(WBP_FMT));
-}
-function fmtKey(book, chap, ref, verse){
-  return `${book}|${chap}|${ref}|v${verse}`;
-}
-/* 현재 단락의 모든 pline을 스냅샷→저장 */
-function persistParagraphFormatting(paraEl){
-  const t = paraEl.querySelector('summary .ptitle');
-  if(!t) return 0;
-  const book = t.dataset.book, chap = +t.dataset.ch, idx = +t.dataset.idx;
-  const para = BIBLE?.books?.[book]?.[chap]?.paras?.[idx];
-  if(!para) return 0;
-  let saved = 0;
-  paraEl.querySelectorAll('.pcontent .pline').forEach(line=>{
-    const v = line.dataset.verse;
-    if(!v) return;
-    const k = fmtKey(book, chap, para.ref, v);
-    WBP_FMT.map[k] = line.innerHTML; // HTML 스냅샷 저장
-    saved++;
-  });
-  saveFmt();
-  return saved;
-}
-/* 현재 단락의 pline에 저장된 서식 복원 */
-function restoreParagraphFormatting(paraEl){
-  const t = paraEl.querySelector('summary .ptitle');
-  if(!t) return 0;
-  const book = t.dataset.book, chap = +t.dataset.ch, idx = +t.dataset.idx;
-  const para = BIBLE?.books?.[book]?.[chap]?.paras?.[idx];
-  if(!para) return 0;
-  let restored = 0;
-  paraEl.querySelectorAll('.pcontent .pline').forEach(line=>{
-    const v = line.dataset.verse;
-    if(!v) return;
-    const k = fmtKey(book, chap, para.ref, v);
-    const html = WBP_FMT.map[k];
-    if(html){
-      line.innerHTML = html;
-      restored++;
-    }
-  });
-  return restored;
-}
-
-/* === 3.1 추가: 절문장 서식정보 저장/복원 기능 === */
-const STORAGE_FMTMAP = 'wbps.fmtmap.v1';
-let FORMAT_MAP = {};
-
-/* --- 저장 및 로드 --- */
-function saveFormatMap() {
-  try { localStorage.setItem(STORAGE_FMTMAP, JSON.stringify(FORMAT_MAP)); }
-  catch (e) { console.warn('saveFormatMap error', e); }
-}
-function loadFormatMap() {
-  try { FORMAT_MAP = JSON.parse(localStorage.getItem(STORAGE_FMTMAP) || '{}'); }
-  catch (e) { FORMAT_MAP = {}; }
-}
-
-/* --- 적용 함수 --- */
-function applyFormatToVerse(paraEl, verse, fmtArr) {
-  const line = paraEl.querySelector(`.pline[data-verse="${verse}"]`);
-  if (!line) return;
-  const text = line.textContent;
-  let html = '';
-  let cursor = 0;
-  for (const f of fmtArr) {
-    const s = Math.max(0, Math.min(text.length, f.start|0));
-    const e = Math.max(s, Math.min(text.length, f.end|0));
-    const attrs = f.attrs || {};
-    html += escapeHtml(text.slice(cursor, s));
-    let open='', close='';
-    if (attrs.b) { open += '<b>'; close = '</b>'+close; }
-    if (attrs.i) { open += '<i>'; close = '</i>'+close; }
-    if (attrs.u) { open += '<u>'; close = '</u>'+close; }
-    if (attrs.color) { open += `<span style="color:${attrs.color}">`; close = '</span>'+close; }
-    html += open + escapeHtml(text.slice(s,e)) + close;
-    cursor = e;
-  }
-  html += escapeHtml(text.slice(cursor));
-  line.innerHTML = `<sup class="pv">${verse}</sup>` + html;
-}
-
-
 const STORAGE_SERMON      = 'wbps.sermons.v4';
 const STORAGE_UNIT_CTX    = 'wbps.ctx.unit.v1';
 const STORAGE_WHOLE_CTX   = 'wbps.ctx.whole.v1';
@@ -163,7 +61,7 @@ function todayStr(){
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 function exportAllData(){
-  const keys = [STORAGE_SERMON, STORAGE_UNIT_CTX, STORAGE_WHOLE_CTX, STORAGE_COMMENTARY, STORAGE_SUMMARY, VOICE_CHOICE_KEY, STORAGE_FORMATS];
+  const keys = [STORAGE_SERMON, STORAGE_UNIT_CTX, STORAGE_WHOLE_CTX, STORAGE_COMMENTARY, STORAGE_SUMMARY, VOICE_CHOICE_KEY];
   const payload = { __wbps:1, date: todayStr(), items:{} };
   keys.forEach(k=> payload.items[k] = localStorage.getItem(k) ?? null);
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
@@ -193,79 +91,6 @@ async function importAllData(file){
   }
 }
 
-/* ==== 서식 맵 단독 내보내기/가져오기 ==== */
-function exportFormatMap(){
-  const map = getFormatMap();
-  const payload = {
-    __wbps_fmt: 1,
-    date: todayStr(),
-    count: Object.keys(map).length,
-    formats: map
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  const ts = new Date();
-  const tss = `${ts.getFullYear()}${String(ts.getMonth()+1).padStart(2,'0')}${String(ts.getDate()).padStart(2,'0')}-${String(ts.getHours()).padStart(2,'0')}${String(ts.getMinutes()).padStart(2,'0')}`;
-  a.href = URL.createObjectURL(blob);
-  a.download = `wbps-formats-${tss}.json`;
-  document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
-  status(`서식 ${Object.keys(map).length}개를 내보냈습니다.`);
-}
-
-async function importFormatMap(file){
-  try{
-    const text = await file.text();
-    const json = JSON.parse(text);
-    if(!json || json.__wbps_fmt !== 1){
-      alert('서식 백업 파일 형식이 아닙니다.'); return;
-    }
-    if(!confirm('이 서식 백업으로 현재 기기의 서식을 덮어쓸까요?')) return;
-    const incoming = json.formats || {};
-    setFormatMap(incoming);
-    status(`서식 ${Object.keys(incoming).length}개를 가져왔습니다.`);
-  }catch(e){
-    console.error(e);
-    alert('서식 가져오기 중 오류가 발생했습니다.');
-  }
-}
-
-/* ==== 서식만 별도 백업/복원 ==== */
-function exportFormattingJSON(){
-  // map이 비어있으면 DOM을 스캔해서 채워 넣음(보이는 상태 그대로 스냅샷)
-  if(!WBP_FMT || !WBP_FMT.map || Object.keys(WBP_FMT.map).length === 0){
-    const root = document.getElementById('tree');
-    if(root){
-      root.querySelectorAll('details.para').forEach(paraEl=>{
-        persistParagraphFormatting(paraEl);
-      });
-    }
-  }
-  const payload = { __wbps_fmt:1, date: todayStr(), map: WBP_FMT.map };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  const ts = new Date();
-  const tss = `${ts.getFullYear()}${String(ts.getMonth()+1).padStart(2,'0')}${String(ts.getDate()).padStart(2,'0')}-${String(ts.getHours()).padStart(2,'0')}${String(ts.getMinutes()).padStart(2,'0')}`;
-  a.href = URL.createObjectURL(blob);
-  a.download = `wbps-formatting-${tss}.json`;
-  document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
-  status('서식 JSON을 내보냈습니다.');
-}
-async function importFormattingJSON(file){
-  try{
-    const text = await file.text();
-    const json = JSON.parse(text);
-    if(!json || json.__wbps_fmt!==1 || !json.map){ alert('서식 백업 파일 형식이 아닙니다.'); return; }
-    WBP_FMT = { map: json.map || {} };
-    saveFmt();
-    status('서식 가져오기 완료. 열려있는 단락은 [서식복원]으로 반영하세요.');
-  }catch(e){
-    console.error(e);
-    alert('서식 가져오기 중 오류가 발생했습니다.');
-  }
-}
-
 /* --------- Refs / State --------- */
 const voiceSelect = el('voiceSelect'), testVoiceBtn = el('testVoice');
 const rateCtl = el('rateCtl'), pitchCtl = el('pitchCtl'), voiceHint = el('voiceHint');
@@ -282,9 +107,6 @@ let EDITOR_READER = { playing:false, u:null, synth:window.speechSynthesis||null 
 
 /* --------- Boot --------- */
 (async function boot(){
-
-  loadFmt(); // 🔹 서식 저장소 로드
-  
   try{
     BIBLE = await tryFetchJSON('bible-paragraph.json');
   }catch(_){
@@ -308,39 +130,6 @@ let EDITOR_READER = { playing:false, u:null, synth:window.speechSynthesis||null 
     const f = e.target.files?.[0]; if(!f) return;
     importAllData(f).finally(()=>{ e.target.value=''; });
   });
-
-  /* === 3.1 추가: 서식 내보내기/가져오기 버튼 === */
-  const fmtExport = document.createElement('button');
-  fmtExport.textContent = '서식 내보내기';
-  fmtExport.onclick = exportFormatMap;
-
-  const fmtImport = document.createElement('button');
-  fmtImport.textContent = '서식 가져오기';
-
-  const fmtFile = document.createElement('input');
-  fmtFile.type = 'file';
-  fmtFile.accept = 'application/json';
-  fmtFile.style.display = 'none';
-
-  fmtImport.onclick = () => fmtFile.click();
-  fmtFile.onchange = e => {
-    const f = e.target.files[0];
-    if (f) importFormatMap(f);
-    e.target.value = '';
-  };
-
-  document.querySelector('header')?.append(fmtExport, fmtImport, fmtFile);
-
-  // 🔹 버튼 DOM 배치: 기존 전체백업 버튼 근처에 배치
-  const target =
-    (btnExport && btnExport.parentElement)
-    || document.querySelector('#topbar .actions')
-    || document.querySelector('header')
-    || document.body;
-
-  target.appendChild(fmtExport);
-  target.appendChild(fmtImport);
-  target.appendChild(fmtFile);
 })();
 
 async function tryFetchJSON(path){ const res = await fetch(path, {cache:'no-store'}); if(!res.ok) throw 0; return await res.json(); }
@@ -515,13 +304,12 @@ function buildTree(){
             <button class="ctxBtn btnWholeCtx">전체성경속 맥락</button>
             <button class="ctxBtn btnCommentary">주석</button>
             <button class="sermBtn">설교</button>
-            <button class="fmtRestoreBtn">서식복원</button>
             <div class="spacer"></div>
           </div>
           <div class="pcontent"></div>`;
 
-        // [PATCH 1 START] 단락 툴바 버튼 보강 (설교/서식저장/서식복원)
-        (function ensureToolbarBtns(){
+        // [PATCH 1 START] 설교 버튼 생성/가시성만 보강 (클릭 바인딩 없음)
+        (function ensureSermonBtn(){
           const tb = body.querySelector('.ptoolbar');
           if (!tb) return;
 
@@ -536,32 +324,6 @@ function buildTree(){
             sermBtn.className = 'sermBtn';
             sermBtn.textContent = '설교';
             tb.appendChild(sermBtn);
-          }
-
-          let saveFmtBtn = tb.querySelector('.btnSaveFmt');
-          if(!saveFmtBtn){
-            saveFmtBtn = document.createElement('button');
-            saveFmtBtn.className = 'btnSaveFmt';
-            saveFmtBtn.textContent = '서식저장';
-            saveFmtBtn.title = '이 단락의 현재 서식을 즉시 저장합니다.';
-            saveFmtBtn.addEventListener('click', ()=>{
-              const n = persistParagraphFormatting(detPara);
-              status(n>0 ? `서식 ${n}개 저장됨` : '저장할 서식을 찾지 못했습니다.');
-            });
-            tb.appendChild(saveFmtBtn);
-          }
-
-          let restoreFmtBtn = tb.querySelector('.btnRestoreFmt');
-          if(!restoreFmtBtn){
-            restoreFmtBtn = document.createElement('button');
-            restoreFmtBtn.className = 'btnRestoreFmt';
-            restoreFmtBtn.textContent = '서식복원';
-            restoreFmtBtn.title = '저장된 서식을 이 단락에 적용합니다.';
-            restoreFmtBtn.addEventListener('click', ()=>{
-              const n = restoreParagraphFormatting(detPara);
-              status(n>0 ? `서식 ${n}개 복원됨` : '복원할 서식이 없습니다.');
-            });
-            tb.appendChild(restoreFmtBtn);
           }
         })();
         // [PATCH 1 END]
@@ -604,11 +366,6 @@ function buildTree(){
         body.querySelector('.btnCommentary').addEventListener('click',()=>{ CURRENT.book=bookName; CURRENT.chap=chap; CURRENT.paraIdx=idx; openSingleDocEditor('commentary'); });
         body.querySelector('.btnSummary').addEventListener('click',   ()=>{ CURRENT.book=bookName; CURRENT.chap=chap; CURRENT.paraIdx=idx; openSingleDocEditor('summary'); });
 
-        // 단락별 서식복원
-        body.querySelector('.fmtRestoreBtn').addEventListener('click', ()=>{
-          restoreParagraphFormats(bookName, chap, idx, detPara);
-        });
-
         parWrap.appendChild(detPara);
       });
 
@@ -619,18 +376,6 @@ function buildTree(){
     detBook.appendChild(chWrap);
     treeEl.appendChild(detBook);
   }
-
-  /* === 3.1 추가: 트리 생성 후 절문장 서식 복원 === */
-  loadFormatMap();
-  for (const [pid, data] of Object.entries(FORMAT_MAP)) {
-    const [book, chap, idx] = pid.split('|');
-    const paraEl = treeEl.querySelector(`details.para[data-book="${book}"][data-ch="${chap}"][data-idx="${idx}"]`);
-    if (!paraEl) continue;
-    for (const verseKey of Object.keys(data)) {
-      applyFormatToVerse(paraEl, verseKey, data[verseKey]);
-    }
-  }
-
     // ✅ 바로 여기에 한 줄 추가합니다 👇👇👇
   document.dispatchEvent(new CustomEvent('wbp:treeBuilt'));
 }
@@ -641,32 +386,16 @@ function buildTree(){
   if (!root) return;
 
   function fix(tb){
-    if (!tb) return;
-
-    // 1) spacer 보강
     if (!tb.querySelector('.spacer')) {
       const sp = document.createElement('div');
       sp.className = 'spacer';
       tb.insertBefore(sp, tb.firstChild);
     }
-
-    // 2) "설교" 버튼 보강
     if (!tb.querySelector('.sermBtn')) {
-      const serm = document.createElement('button');
-      serm.className = 'sermBtn';
-      serm.textContent = '설교';
-      tb.appendChild(serm);
-    }
-
-    // 3) "서식복원" 버튼 보강
-    if (!tb.querySelector('.fmtRestoreBtn')) {
-      const fmt = document.createElement('button');
-      fmt.className = 'fmtRestoreBtn';
-      fmt.textContent = '서식복원';
-      // speakBtn / keepReading 다음, 컨텍스트 버튼들 앞쪽에 배치
-      const before = tb.querySelector('.ctxBtn, .sermBtn, .spacer');
-      if (before) tb.insertBefore(fmt, before);
-      else tb.appendChild(fmt);
+      const b = document.createElement('button');
+      b.className = 'sermBtn';
+      b.textContent = '설교';
+      tb.appendChild(b);
     }
   }
 
@@ -695,9 +424,6 @@ function ensureSermonButtons(){
     btn.className = 'sermBtn';
     btn.textContent = '설교';
     tb.appendChild(btn);
-
-
-
   });
 }
 
@@ -895,123 +621,6 @@ function setSermonMap(o){ localStorage.setItem(STORAGE_SERMON, JSON.stringify(o)
 function getDocMap(storageKey){ try{ return JSON.parse(localStorage.getItem(storageKey)||'{}'); }catch{ return {}; } }
 function setDocMap(storageKey, obj){ localStorage.setItem(storageKey, JSON.stringify(obj)); }
 
-/* ===== 포맷맵 유틸 ===== */
-function getFormatMap(){
-  try{ return JSON.parse(localStorage.getItem(STORAGE_FORMATS) || '{}'); }
-  catch{ return {}; }
-}
-function setFormatMap(obj){
-  localStorage.setItem(STORAGE_FORMATS, JSON.stringify(obj));
-}
-
-// (TTS용과 별개) 단순 plain 변환 유틸이 필요할 때 재사용
-function htmlToPlainInner(html){
-  const tmp = document.createElement('div'); tmp.innerHTML = html || '';
-  tmp.querySelectorAll('sup').forEach(s=> s.remove());
-  return (tmp.textContent || '').trim();
-}
-
-/* ===== 단락 서식 복원 ===== */
-/*
-  저장 스키마 예:
-  map[paraId] = [
-    { v: 3, start: 5, end: 12, styles: { b:true, i:false, u:false, strike:false, color:"#ff0000" } },
-    ...
-  ]
-  - paraId = `${book}|${chap}|${para.ref}`
-  - v = 절 번호
-  - start/end = 절 내에서의 문자 index (0-based)
-*/
-function restoreParagraphFormats(book, chap, idx, scopeEl){
-  try{
-    const para = BIBLE?.books?.[book]?.[chap]?.paras?.[idx];
-    if(!para) return alert('단락을 찾을 수 없습니다.');
-    const pid = `${book}|${chap}|${para.ref}`;
-    const map = getFormatMap();
-    const runs = map[pid] || [];
-    if(!Array.isArray(runs) || runs.length===0){
-      alert('저장된 서식이 없습니다.');
-      return;
-    }
-    applyRunsToParagraph(scopeEl, runs);
-    status('이 단락의 서식을 복원했습니다.');
-  }catch(e){
-    console.error(e);
-    alert('서식 복원 중 오류가 발생했습니다.');
-  }
-}
-
-function applyRunsToParagraph(paraDetailsEl, runs){
-  const pcontent = paraDetailsEl.querySelector('.pcontent');
-  if(!pcontent) return;
-
-  const lines = [...pcontent.querySelectorAll('.pline')];
-  const byVerse = new Map();
-  runs.forEach(r=>{
-    if(!byVerse.has(r.v)) byVerse.set(r.v, []);
-    byVerse.get(r.v).push(r);
-  });
-
-  for(const line of lines){
-    const v = parseInt(line.dataset.verse, 10);
-    if(!byVerse.has(v)) continue;
-
-    const sup = line.querySelector('sup.pv');
-    if(!sup) continue;
-
-    const rawHTML = line.innerHTML;
-    const after = rawHTML.replace(/^<sup[^>]*>.*?<\/sup>/i, '');
-    const plain = htmlToPlainText(after);
-
-    line.innerHTML = sup.outerHTML;
-
-    const baseText = document.createTextNode(plain);
-    line.appendChild(baseText);
-
-    const jobs = byVerse.get(v).slice().sort((a,b)=> (a.start||0)-(b.start||0));
-    applyRunsToTextNode(line, baseText, jobs);
-  }
-}
-
-function htmlToPlainText(html){
-  const tmp = document.createElement('div');
-  tmp.innerHTML = html || '';
-  tmp.querySelectorAll('sup,pv,.pv,sup.pv').forEach(el => el.remove());
-  return (tmp.textContent || '');
-}
-
-function applyRunsToTextNode(scope, textNode, jobs){
-  let offset = 0;
-  for(const r of jobs){
-    const s = Math.max(0, Math.min(textNode.length, r.start|0));
-    const e = Math.max(s, Math.min(textNode.length, r.end|0));
-    if(e <= offset) continue;
-
-    if(s > offset){
-      const pre = textNode.splitText(s - offset);
-      textNode = pre.nextSibling;
-      offset = s;
-    }
-
-    const len = e - s;
-    const mid = textNode.splitText(len);
-    const styled = textNode;
-    textNode = mid;
-    offset = e;
-
-    const span = document.createElement('span');
-    if(r.styles){
-      if(r.styles.b) span.style.fontWeight = '700';
-      if(r.styles.i) span.style.fontStyle = 'italic';
-      if(r.styles.u) span.style.textDecoration = (span.style.textDecoration ? span.style.textDecoration+' ' : '') + 'underline';
-      if(r.styles.strike) span.style.textDecoration = (span.style.textDecoration ? span.style.textDecoration+' ' : '') + 'line-through';
-      if(r.styles.color) span.style.color = r.styles.color;
-    }
-    span.textContent = styled.textContent;
-    styled.replaceWith(span);
-  }
-}
-
 /* ✅ 최초 클릭 시에도 동작하도록 보강 + 중복편집기 제거 전제 */
 function openSermonModal(){
   if (!CURRENT.book || !Number.isFinite(CURRENT.chap) || !Number.isFinite(CURRENT.paraIdx)) {
@@ -1094,6 +703,7 @@ function openSingleDocEditor(kind){
   }
 }
 
+/* ✅ 설교목록 렌더링 */
 /* ✅ 설교목록 렌더링 (제목 → 날짜 → 링크 → 편집 → 삭제 순서) */
 function renderSermonList(){
   const map = getSermonMap();
@@ -1314,32 +924,6 @@ function execFmt(cmd){
     sermonBody.focus({preventScroll:true});
     document.execCommand(cmd,false,null);
   }
-
-  // === 3.1 추가: 현재 절문장 서식정보를 저장 ===
-  try {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    const node = sel.anchorNode;
-    const verseEl = node?.closest?.('.pline');
-    const paraEl = node?.closest?.('details.para');
-    if (!verseEl || !paraEl) return;
-    const verse = verseEl.dataset.verse;
-    const book = paraEl.dataset.book;
-    const ch = paraEl.dataset.ch;
-    const idx = paraEl.dataset.idx;
-    const text = verseEl.textContent || '';
-    const range = sel.getRangeAt(0);
-    const start = 0;
-    const end = text.length;
-    const attrs = { [cmd]: true };
-
-    const pid = `${book}|${ch}|${idx}`;
-    if (!FORMAT_MAP[pid]) FORMAT_MAP[pid] = {};
-    if (!FORMAT_MAP[pid][verse]) FORMAT_MAP[pid][verse] = [];
-    FORMAT_MAP[pid][verse].push({ start, end, attrs });
-    saveFormatMap();
-  } catch (_) {}
-
 }
 
 /* --------- Editor TTS --------- */
@@ -2334,125 +1918,4 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
       setTimeout(showBar,0);
     }
   });
-
-/* === 3.1 추가: 단락별 서식복원 버튼 자동 삽입 === */
-(function injectParaRestoreButton(){
-  // 🔹 특정 단락 메타정보 추출
-  function metaFromParaEl(paraEl){
-    const t = paraEl.querySelector('summary .ptitle');
-    if(!t) return null;
-    return { book: t.dataset.book, ch: +t.dataset.ch, idx: +t.dataset.idx };
-  }
-
-  // 🔹 실제 복원 수행
-  function restoreFormattingForPara(paraEl){
-    const m = metaFromParaEl(paraEl);
-    if(!m) return alert('단락 정보를 찾을 수 없습니다.');
-    const para = window.BIBLE?.books?.[m.book]?.[m.ch]?.paras?.[m.idx];
-    if(!para) return alert('성경 본문 데이터가 없습니다.');
-
-    // 절별 키는 "book|ch|para.ref|v절번호"
-    const prefix = `${m.book}|${m.ch}|${para.ref}|v`;
-    const fmtMap = window.WBP_FMT?.map || {};
-    let count = 0;
-    paraEl.querySelectorAll('.pline').forEach(line=>{
-      const v = line.dataset.verse;
-      const key = `${prefix}${v}`;
-      const html = fmtMap[key];
-      if(html){
-        line.innerHTML = html;
-        count++;
-      }
-    });
-    alert(`${m.book} ${m.ch}장 ${m.idx+1}번째 단락의 서식 ${count}개 복원 완료.`);
-  }
-
-  // 🔹 버튼 생성 함수
-  function addRestoreBtn(tb, paraEl){
-    if(tb.querySelector('.btnRestoreFmt')) return;
-    const btn = document.createElement('button');
-    btn.className = 'btnRestoreFmt';
-    btn.textContent = '서식복원';
-    btn.title = '이 단락의 서식정보를 LocalStorage에서 복원합니다.';
-    btn.style.background = '#224466';
-    btn.style.color = '#fff';
-    btn.style.border = '1px solid #5577aa';
-    btn.style.borderRadius = '8px';
-    btn.addEventListener('click', ()=> restoreFormattingForPara(paraEl));
-    tb.appendChild(btn);
-  }
-
-  // 🔹 초기 + MutationObserver
-  const root = document.getElementById('tree');
-  if(!root) return;
-  root.querySelectorAll('details.para').forEach(paraEl=>{
-    const tb = paraEl.querySelector('.ptoolbar');
-    if(tb) addRestoreBtn(tb, paraEl);
-  });
-
-  new MutationObserver((muts)=>{
-    for(const m of muts){
-      m.addedNodes?.forEach?.(n=>{
-        if(!(n instanceof HTMLElement)) return;
-        const paraEl = n.matches?.('details.para') ? n : n.closest?.('details.para');
-        const tb = paraEl?.querySelector?.('.ptoolbar');
-        if(paraEl && tb) addRestoreBtn(tb, paraEl);
-      });
-    }
-  }).observe(root, {subtree:true, childList:true});
-})();
-
-})();
-
-/* === 3.1 최종 수정: 단락별 서식복원 버튼 === */
-(function(){
-  function metaFromParaEl(paraEl){
-    const t = paraEl.querySelector('summary .ptitle');
-    if(!t) return null;
-    return { book:t.dataset.book, ch:+t.dataset.ch, idx:+t.dataset.idx };
-  }
-
-  function restoreFormattingForPara(paraEl){
-    const m = metaFromParaEl(paraEl);
-    if(!m) return alert('단락 정보를 찾을 수 없습니다.');
-    const para = window.BIBLE?.books?.[m.book]?.[m.ch]?.paras?.[m.idx];
-    if(!para) return alert('성경 본문 데이터가 없습니다.');
-
-    const prefix = `${m.book}|${m.ch}|${para.ref}|v`;
-    const fmtMap = window.WBP_FMT?.map || {};
-    let count = 0;
-    paraEl.querySelectorAll('.pline').forEach(line=>{
-      const v = line.dataset.verse;
-      const html = fmtMap[`${prefix}${v}`];
-      if(html){ line.innerHTML = html; count++; }
-    });
-    alert(`${m.book} ${m.ch}장 ${m.idx+1}번째 단락의 서식 ${count}개 복원 완료.`);
-  }
-
-  function addRestoreBtn(tb, paraEl){
-    if(tb.querySelector('.btnRestoreFmt')) return;
-    const btn = document.createElement('button');
-    btn.className = 'btnRestoreFmt';
-    btn.textContent = '서식복원';
-    btn.title = '이 단락의 서식정보를 LocalStorage에서 복원합니다.';
-    btn.style.background = '#224466';
-    btn.style.color = '#fff';
-    btn.style.border = '1px solid #5577aa';
-    btn.style.borderRadius = '8px';
-    btn.style.padding = '6px 10px';
-    btn.addEventListener('click', ()=> restoreFormattingForPara(paraEl));
-    tb.appendChild(btn);
-  }
-
-  function sweep(){
-    const root = document.getElementById('tree');
-    if(!root) return;
-    root.querySelectorAll('details.para').forEach(paraEl=>{
-      const tb = paraEl.querySelector('.ptoolbar');
-      if(tb) addRestoreBtn(tb, paraEl);
-    });
-  }
-
-  // ✅ buildTree 완료 후 단락들이 생성되면 버튼 삽입
-  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(sweep, 100));
 })();
