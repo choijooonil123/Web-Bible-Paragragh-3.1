@@ -618,10 +618,15 @@ function buildTree(){
 
         detPara.addEventListener('toggle', ()=>{
           if(detPara.open){
-            CURRENT.book = bookName; CURRENT.chap = chap; CURRENT.paraIdx = idx;
+            CURRENT.book = bookName;
+            CURRENT.chap = chap;
+            CURRENT.paraIdx = idx;
+
             const para = BIBLE.books[bookName][chap].paras[idx];
             CURRENT.paraId = `${bookName}|${chap}|${para.ref}`;
+
             status(`선택됨: ${bookName} ${chap}장 · ${para.title||para.ref}`);
+
             // 열릴 때 설교 버튼 누락 시 즉시 생성 (클릭 바인딩 없음)
             const tb = detPara.querySelector('.ptoolbar');
             if (tb && !tb.querySelector('.sermBtn')) {
@@ -630,8 +635,13 @@ function buildTree(){
               btn.textContent = '설교';
               tb.appendChild(btn);
             }
+
+            /* ✅ 여기 추가: 절문장 서식 자동 복원 */
+            window.FmtLocal?.restoreVisible();
+
           }
         });
+
 
         body.querySelector('.speakBtn').addEventListener('click', ()=>{
           toggleSpeakInline(bookName, chap, idx, detPara, body.querySelector('.speakBtn'));
@@ -2190,6 +2200,8 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
         if(cmd){
         document.execCommand(cmd,false,null);
         saveSel(); showBar();
+        // ⬇️ 이 줄 추가
+        window.FmtLocal?.saveDebounced();
         return;
         }
         if(act==='clearColor'){
@@ -2206,12 +2218,16 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
             document.execCommand('insertHTML', false, div.innerHTML);
         }catch(_){}
         saveSel(); showBar();
+        // ⬇️ 이 줄 추가
+        window.FmtLocal?.saveDebounced();
         }
     });
     color?.addEventListener('input', ()=>{
         if(!restoreSel()) return;
         document.execCommand('foreColor', false, color.value);
         saveSel(); showBar();
+        // ⬇️ 이 줄 추가
+        window.FmtLocal?.saveDebounced();
     });
 
     document.addEventListener('selectionchange', ()=>{
@@ -2554,4 +2570,183 @@ function applyJSON_fmt(json){
   // 개발시에만 주석 해제하여 확인하세요.
   // diagnoseFmtSurface();
   }
+})();
+/* ===== FmtLocal (절문장 서식 LocalStorage 자동 저장/복원) ===== */
+(function(){
+  const LS_KEY = 'wbps.format.v2'; // 전체 저장 키 (필요 시 para별로 분리 가능)
+
+  // 안전 쿼리
+  const $ = (sel, root=document)=> root.querySelector(sel);
+  const $$= (sel, root=document)=> Array.from(root.querySelectorAll(sel));
+
+  // verse 노드 식별자 (FmtIO와 동일한 규칙 유지)
+  function nodeId(node){
+    const byAttr = node.getAttribute('data-vid');
+    if (byAttr) return byAttr;
+    if (node.id) return node.id;
+    const para = node.closest('[data-para-id]');
+    const paraId = para ? para.getAttribute('data-para-id') : 'para';
+    const idx = node.parentNode ? Array.prototype.indexOf.call(node.parentNode.children, node) : -1;
+    return `${paraId}::${idx}`;
+  }
+
+  // 태그/스타일 → 상태 머지
+  function markFromEl(el, base){
+    const tag = el.tagName.toLowerCase();
+    const m = { ...base };
+    if (tag==='b' || tag==='strong') m.b = true;
+    if (tag==='i' || tag==='em')     m.i = true;
+    if (tag==='u')                   m.u = true;
+    const sc = el.style?.color || el.getAttribute('color');
+    if (sc) m.color = sc;
+    return m;
+  }
+
+  // DOM → (plain text, styled spans with start/end)
+  function extractTextAndSpans(root){
+    const segs = [];
+    let text = '';
+
+    (function walk(n, m){
+      if (n.nodeType === Node.TEXT_NODE){
+        const t = n.nodeValue || '';
+        if (!t) return;
+        segs.push({ text: t, ...m });
+        text += t;
+        return;
+      }
+      if (n.nodeType === Node.ELEMENT_NODE){
+        // <sup>같은 장식 태그는 텍스트로 포함하되 스타일은 상속
+        let m2 = { ...m };
+        m2 = markFromEl(n, m2);
+        n.childNodes.forEach(ch => walk(ch, m2));
+      }
+    })(root, { b:false, i:false, u:false, color:null });
+
+    // segs → 연속 오프셋 span
+    const spans = [];
+    let pos = 0;
+    for (const s of segs){
+      const length = s.text.length;
+      const styled = !!(s.b || s.i || s.u || s.color);
+      if (styled){
+        spans.push({
+          start: pos,
+          end: pos + length,
+          b: !!s.b, i: !!s.i, u: !!s.u,
+          color: s.color || null
+        });
+      }
+      pos += length;
+    }
+    return { text, spans };
+  }
+
+  // HTML escape
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // (text, spans) → HTML
+  function paintTextWithSpans(text, spans){
+    if (!text) return '';
+    if (!Array.isArray(spans) || !spans.length) return esc(text);
+
+    // 정렬 및 병합 전제: 추출기는 겹치지 않는 구간으로 생성
+    spans = spans.slice().sort((a,b)=> a.start - b.start);
+    let html = '';
+    let p = 0;
+
+    for (const sp of spans){
+      const { start, end, b, i, u, color } = sp;
+      const s = Math.max(0, Math.min(text.length, start|0));
+      const e = Math.max(s, Math.min(text.length, end|0));
+
+      if (p < s) html += esc(text.slice(p, s)); // 비서식 구간
+
+      let chunk = esc(text.slice(s, e));
+      if (color) chunk = `<span style="color:${color}">${chunk}</span>`;
+      if (u)     chunk = `<u>${chunk}</u>`;
+      if (i)     chunk = `<i>${chunk}</i>`;
+      if (b)     chunk = `<b>${chunk}</b>`;
+      html += chunk;
+
+      p = e;
+    }
+    if (p < text.length) html += esc(text.slice(p));
+    return html;
+  }
+
+  // 화면에서 .pline 수집 → v2 JSON
+  function buildJSON_v2_fromDOM(){
+    const lines = $$('.pline');
+    const items = lines.map(n=>{
+      const { text, spans } = extractTextAndSpans(n);
+      return { id: nodeId(n), text, spans };
+    });
+    return { type:'format-v2', version:2, exportedAt: new Date().toISOString(), items };
+  }
+
+  // v2 JSON을 화면에 적용
+  function applyJSON_fmt_v2(data){
+    if (!data || data.type!=='format-v2' || !Array.isArray(data.items)) return;
+    // 인덱스 맵 (현재 보이는 화면 기준)
+    const index = new Map();
+    $$('.pline').forEach(n => index.set(nodeId(n), n));
+
+    for (const it of data.items){
+      const node = index.get(it.id);
+      if (!node) continue;
+      // 화면의 현재 plain text 기준 재도색 (item.text 길이와 달라도 최대한 보수적으로 처리)
+      const currentText = node.textContent || '';
+      const base = (currentText.length ? currentText : it.text || '');
+      node.innerHTML = paintTextWithSpans(base, it.spans || []);
+    }
+  }
+
+  // 저장
+  function saveAll(){
+    try{
+      const json =
+        (window.FmtIO?.buildJSON_v2 && window.FmtIO.buildJSON_v2()) ||
+        buildJSON_v2_fromDOM();
+      localStorage.setItem(LS_KEY, JSON.stringify(json));
+      typeof status === 'function' && status('서식이 localStorage에 저장되었습니다.');
+    }catch(e){
+      console.error('[FmtLocal] saveAll failed', e);
+      alert('서식 저장에 실패했습니다. (콘솔 확인)');
+    }
+  }
+
+  // 디바운스 저장
+  let _t=null;
+  function saveDebounced(ms=400){
+    clearTimeout(_t);
+    _t = setTimeout(saveAll, ms);
+  }
+
+  // 복원 (현재 보이는 .pline 에만 적용)
+  function restoreVisible(){
+    try{
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (window.FmtIO?.applyJSON_fmt_v2) window.FmtIO.applyJSON_fmt_v2(data);
+      else applyJSON_fmt_v2(data);
+      typeof status === 'function' && status('서식을 localStorage에서 복원했습니다.');
+    }catch(e){
+      console.warn('[FmtLocal] restoreVisible skipped:', e?.message);
+    }
+  }
+
+  // 공개 API
+  window.FmtLocal = {
+    saveAll, saveDebounced, restoreVisible
+  };
+
+  // 초기 복원: DOM 준비 후 / 트리 빌드 후
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', restoreVisible);
+  } else {
+    restoreVisible();
+  }
+  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(restoreVisible, 0));
 })();
