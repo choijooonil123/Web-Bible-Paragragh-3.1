@@ -74,39 +74,42 @@ function restoreFormatForOpenPara(){
 
 // ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 BEGIN =====
 function ensureFormatButtons(){
-  // 버튼을 끼울 자리를 우선 탐색: statusEl 근처가 있으면 그 옆에, 없으면 body에 플로팅
-  let host = (typeof statusEl !== 'undefined' && statusEl && statusEl.parentElement) ? statusEl.parentElement : null;
-  if(!host){
-    // 플로팅 컨테이너 생성(다른 UI에 영향 없도록 z-index와 클래스 별도)
-    const float = document.createElement('div');
-    float.style.position = 'fixed';
-    float.style.right = '12px';
-    float.style.bottom = '12px';
-    float.style.display = 'flex';
-    float.style.gap = '8px';
-    float.style.zIndex = '99999';
-    document.body.appendChild(float);
-    host = float;
-  }
+  // 설교버튼 옆(header 안)에 붙이기
+  const sermonBtn = document.getElementById('btnSermon');
+  if(!sermonBtn) return; // 설교버튼 없으면 종료 (오류 방지)
 
-  // 중복 생성 방지
-  if(host.querySelector('#btnFmtSave')) return;
+  // 이미 생성된 경우 중복 생성 방지
+  if(document.getElementById('btnFmtSave')) return;
 
   const btnSave = document.createElement('button');
   btnSave.id = 'btnFmtSave';
   btnSave.type = 'button';
   btnSave.textContent = '서식저장';
+  btnSave.style.marginLeft = '8px';
   btnSave.style.padding = '6px 10px';
+  btnSave.style.border = '1px solid #555';
+  btnSave.style.background = '#1e1f26';
+  btnSave.style.color = '#e6e8ef';
+  btnSave.style.borderRadius = '4px';
+  btnSave.style.cursor = 'pointer';
 
   const btnLoad = document.createElement('button');
   btnLoad.id = 'btnFmtLoad';
   btnLoad.type = 'button';
   btnLoad.textContent = '서식회복';
+  btnLoad.style.marginLeft = '4px';
   btnLoad.style.padding = '6px 10px';
+  btnLoad.style.border = '1px solid #555';
+  btnLoad.style.background = '#1e1f26';
+  btnLoad.style.color = '#e6e8ef';
+  btnLoad.style.borderRadius = '4px';
+  btnLoad.style.cursor = 'pointer';
 
-  host.appendChild(btnSave);
-  host.appendChild(btnLoad);
+  // 설교버튼 바로 뒤에 삽입
+  sermonBtn.insertAdjacentElement('afterend', btnSave);
+  btnSave.insertAdjacentElement('afterend', btnLoad);
 
+  // 클릭 이벤트 연결
   btnSave.addEventListener('click', saveFormatForOpenPara);
   btnLoad.addEventListener('click', restoreFormatForOpenPara);
 }
