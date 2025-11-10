@@ -10,6 +10,21 @@ function status(msg){
 function escapeHtml(s){ return (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
 function stripBlankLines(s){return String(s||'').split(/\r?\n/).filter(l=>l.trim()!=='').join('\n');}
 
+// ⬇️ Utils 근처, 전역에 추가
+function downloadBibleJSON() {
+  if (!BIBLE) { alert('성경 데이터가 아직 로드되지 않았습니다.'); return; }
+  try {
+    const ts = new Date();
+    const file = `bible-paragraphs-export-${ts.getFullYear()}${String(ts.getMonth()+1).padStart(2,'0')}${String(ts.getDate()).padStart(2,'0')}-${String(ts.getHours()).padStart(2,'0')}${String(ts.getMinutes()).padStart(2,'0')}.json`;
+    download(BIBLE, file);  // ← 이미 있으신 download(obj, filename) 사용
+    if (typeof status === 'function') status('성경 JSON을 내보냈습니다.');
+  } catch (e) {
+    console.error(e);
+    alert('성경 JSON 내보내기에 실패했습니다.');
+  }
+}
+
+
 function syncCurrentFromOpen(){
   const openPara = treeEl.querySelector('details.para[open]');
   if(!openPara) return false;
@@ -116,18 +131,42 @@ let READER = { playing:false, q:[], idx:0, synth:window.speechSynthesis||null, s
 let EDITOR_READER = { playing:false, u:null, synth:window.speechSynthesis||null };
 
 /* --------- Boot --------- */
+// ⬇️ tryFetchJSON는 그대로 두고, boot()의 로딩 부분만 교체
 (async function boot(){
   try{
-    BIBLE = await tryFetchJSON('bible-paragraph.json');
+    // 가장 흔한 두 이름 우선 시도
+    BIBLE = await tryFetchJSON('./bible-paragraph.json');
   }catch(_){
-    try{ BIBLE = await tryFetchJSON('bible_paragraphs.json'); }
-    catch(e){ status('bible-paragraph.json을 찾을 수 없습니다. 같은 폴더에 두고 다시 열어주세요.'); return; }
+    try{
+      BIBLE = await tryFetchJSON('./bible_paragraphs.json');
+    }catch(_e){
+      // 배포 경로가 한 단계 위/아래일 수 있으니 몇 개 더 시도
+      const candidates = [
+        '../bible-paragraph.json',
+        '../bible_paragraphs.json',
+        '/bible-paragraph.json',
+        '/bible_paragraphs.json'
+      ];
+      let ok = null;
+      for (const p of candidates){
+        try { ok = await tryFetchJSON(p); break; } catch(__){}
+      }
+      if (!ok){
+        status('bible-paragraph.json을 찾을 수 없습니다. 같은 폴더(또는 위 경로)에 두고 다시 열어주세요.');
+        return; // ⛔ 성경 없으면 여기서 종료
+      }
+      BIBLE = ok;
+    }
   }
+
   buildTree();
-  ensureSermonButtons();   // 🔧 설교 버튼 누락 시 보강
+  ensureSermonButtons();
   status('불러오기 완료. 66권 트리가 활성화되었습니다.');
-  await setupVoices();
+
+  // ⬇️ 음성 UI가 없을 수 있으니 안전 가드
+  await setupVoicesSafely();
 })();
+
 
 (function bindButtons(){
   el('btnSaveJSON')?.addEventListener('click', downloadBibleJSON);
@@ -145,102 +184,180 @@ let EDITOR_READER = { playing:false, u:null, synth:window.speechSynthesis||null 
 async function tryFetchJSON(path){ const res = await fetch(path, {cache:'no-store'}); if(!res.ok) throw 0; return await res.json(); }
 
 /* --------- Voice --------- */
-function waitForVoices(timeout=1500){
-  return new Promise(resolve=>{
+/* --------- Voice (SAFE) --------- */
+
+// 안전 엘리먼트 조회
+const getEl = (id) => document.getElementById(id);
+
+// 음성 UI 존재 여부를 한 번만 계산
+const VOICE_UI = (() => {
+  const voiceSelect = getEl('voiceSelect');
+  const testVoiceBtn = getEl('testVoice');
+  const rateCtl = getEl('rateCtl');
+  const pitchCtl = getEl('pitchCtl');
+  const voiceHint = getEl('voiceHint');
+  return {
+    voiceSelect, testVoiceBtn, rateCtl, pitchCtl, voiceHint,
+    present: !!voiceSelect && !!rateCtl && !!pitchCtl // 핵심 3요소가 있으면 UI 있다고 판단
+  };
+})();
+
+// 전역 캐시(UI 없는 페이지에서도 음성 목록을 재사용 가능)
+let __WBPS_VOICES_CACHE = null;
+
+// 브라우저에 음성 목록이 로드될 때까지 기다림
+function waitForVoices(timeout = 1500) {
+  return new Promise(resolve => {
+    if (!('speechSynthesis' in window)) return resolve([]);
     const have = speechSynthesis.getVoices?.();
     if (have && have.length) return resolve(have);
-    const t = setTimeout(()=> resolve(speechSynthesis.getVoices?.()||[]), timeout);
-    speechSynthesis.onvoiceschanged = ()=>{ clearTimeout(t); resolve(speechSynthesis.getVoices?.()||[]); };
+    const t = setTimeout(() => resolve(speechSynthesis.getVoices?.() || []), timeout);
+    speechSynthesis.onvoiceschanged = () => { clearTimeout(t); resolve(speechSynthesis.getVoices?.() || []); };
   });
 }
-function getKoreanVoices(all){
-  return (all||[]).filter(v=>{
-    const n=(v.name||'').toLowerCase(), l=(v.lang||'').toLowerCase();
+
+function getKoreanVoices(all) {
+  return (all || []).filter(v => {
+    const n = (v.name || '').toLowerCase();
+    const l = (v.lang || '').toLowerCase();
     return l.startsWith('ko') || n.includes('korean') || n.includes('한국') || n.includes('korea');
   });
 }
-function presetsForSingleVoice(){
+
+function presetsForSingleVoice() {
   return [
-    {id:'preset-soft-low',  label:'프리셋 · 저음/느림',   rate:0.85, pitch:0.85},
-    {id:'preset-soft-high', label:'프리셋 · 고음/느림',   rate:0.90, pitch:1.20},
-    {id:'preset-fast',      label:'프리셋 · 빠름',       rate:1.20, pitch:1.05},
-    {id:'preset-bright',    label:'프리셋 · 밝게',       rate:1.05, pitch:1.25},
-    {id:'preset-radio',     label:'프리셋 · 라디오톤',   rate:1.00, pitch:0.90},
-    {id:'preset-reading',   label:'프리셋 · 낭독체',     rate:0.95, pitch:1.00},
+    { id:'preset-soft-low',  label:'프리셋 · 저음/느림', rate:0.85, pitch:0.85 },
+    { id:'preset-soft-high', label:'프리셋 · 고음/느림', rate:0.90, pitch:1.20 },
+    { id:'preset-fast',      label:'프리셋 · 빠름',     rate:1.20, pitch:1.05 },
+    { id:'preset-bright',    label:'프리셋 · 밝게',     rate:1.05, pitch:1.25 },
+    { id:'preset-radio',     label:'프리셋 · 라디오톤', rate:1.00, pitch:0.90 },
+    { id:'preset-reading',   label:'프리셋 · 낭독체',   rate:0.95, pitch:1.00 },
   ];
 }
-async function setupVoices(){
+
+// 음성 선택 저장 키
+const VOICE_CHOICE_KEY = 'wbps.tts.choice.v2';
+
+// 선택 저장/복원
+function resolveVoiceChoice() {
+  try { return JSON.parse(localStorage.getItem(VOICE_CHOICE_KEY) || '{"type":"default"}'); }
+  catch { return { type: 'default' }; }
+}
+
+function pickVoiceByURI(uri) {
+  if (!('speechSynthesis' in window)) return null;
+  return (speechSynthesis.getVoices?.() || []).find(v => v.voiceURI === uri) || null;
+}
+
+function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+
+// === 핵심: UI가 있든 없든 안전하게 동작하는 applyVoice
+function applyVoice(u) {
+  // 기본값(음성 UI가 없어도 문제없이 동작)
+  let baseRate = 0.95;
+  let basePitch = 1.0;
+
+  if (VOICE_UI.present) {
+    // 슬라이더가 있다면 그 값을 사용
+    baseRate = parseFloat(VOICE_UI.rateCtl.value || '0.95');
+    basePitch = parseFloat(VOICE_UI.pitchCtl.value || '1');
+  }
+
+  const choice = resolveVoiceChoice();
+
+  if (choice.type === 'voice') {
+    const v = pickVoiceByURI(choice.uri);
+    if (v) { u.voice = v; u.lang = v.lang || 'ko-KR'; }
+    else   { u.lang = 'ko-KR'; }
+    u.rate = baseRate; u.pitch = basePitch;
+  } else if (choice.type === 'preset') {
+    u.lang = 'ko-KR';
+    u.rate  = clamp((choice.rate ?? 0.95) * baseRate / 0.95, 0.5, 2);
+    u.pitch = clamp((choice.pitch ?? 1.0) * basePitch / 1.0, 0, 2);
+  } else {
+    u.lang = 'ko-KR';
+    u.rate = baseRate; u.pitch = basePitch;
+  }
+}
+
+function speakSample(text) {
+  if (!('speechSynthesis' in window)) return alert('이 브라우저는 음성합성을 지원하지 않습니다.');
+  const synth = window.speechSynthesis;
+  try { synth.cancel(); } catch(_) {}
+  const u = new SpeechSynthesisUtterance(text);
+  applyVoice(u);
+  synth.speak(u);
+}
+
+// === 안전한 초기화: UI가 없으면 DOM 조작을 건너뛰고, 음성 목록만 로드해 캐시에 보관
+async function setupVoices() {
+  if (!('speechSynthesis' in window)) return; // 음성합성 비지원 브라우저
+
   const all = await waitForVoices();
   const kos = getKoreanVoices(all);
+  __WBPS_VOICES_CACHE = { all, kos };
 
+  if (!VOICE_UI.present) {
+    // 음성 UI가 없는 페이지: 아무 것도 건드리지 않고 종료
+    return;
+  }
+
+  // ===== 아래부터는 음성 UI가 있는 페이지에서만 실행 =====
+  const { voiceSelect, testVoiceBtn, voiceHint } = VOICE_UI;
+  if (!voiceSelect) return; // 가드
+
+  // 셀렉트 초기화
   voiceSelect.innerHTML = '';
+
   const def = document.createElement('option');
-  def.value = JSON.stringify({type:'default'});
+  def.value = JSON.stringify({ type:'default' });
   def.textContent = '브라우저 기본(ko-KR)';
   voiceSelect.appendChild(def);
 
-  if(kos.length > 0){
-    const og = document.createElement('optgroup'); og.label = '한국어 보이스';
-    kos.forEach(v=>{
+  if (kos.length > 0) {
+    const og = document.createElement('optgroup');
+    og.label = '한국어 보이스';
+    kos.forEach(v => {
       const opt = document.createElement('option');
-      opt.value = JSON.stringify({type:'voice', uri:v.voiceURI});
+      opt.value = JSON.stringify({ type:'voice', uri: v.voiceURI });
       opt.textContent = `${v.name} — ${v.lang}${v.localService ? ' (로컬)' : ''}`;
       og.appendChild(opt);
     });
     voiceSelect.appendChild(og);
   }
-  if(kos.length <= 1){
-    const pg = document.createElement('optgroup'); pg.label = '스타일 프리셋';
-    presetsForSingleVoice().forEach(p=>{
+
+  if (kos.length <= 1) {
+    const pg = document.createElement('optgroup');
+    pg.label = '스타일 프리셋';
+    presetsForSingleVoice().forEach(p => {
       const opt = document.createElement('option');
-      opt.value = JSON.stringify({type:'preset', rate:p.rate, pitch:p.pitch});
+      opt.value = JSON.stringify({ type:'preset', rate:p.rate, pitch:p.pitch });
       opt.textContent = p.label;
       pg.appendChild(opt);
     });
-    voiceHint.style.display = '';
+    if (voiceHint) voiceHint.style.display = '';
   } else {
-    voiceHint.style.display = 'none';
+    if (voiceHint) voiceHint.style.display = 'none';
   }
 
   const saved = localStorage.getItem(VOICE_CHOICE_KEY);
-  if(saved){
-    const idx = [...voiceSelect.options].findIndex(o=>o.value===saved);
-    if(idx>=0) voiceSelect.selectedIndex = idx;
+  if (saved) {
+    const idx = [...voiceSelect.options].findIndex(o => o.value === saved);
+    if (idx >= 0) voiceSelect.selectedIndex = idx;
   } else {
     localStorage.setItem(VOICE_CHOICE_KEY, voiceSelect.value);
   }
-  voiceSelect.addEventListener('change', ()=> localStorage.setItem(VOICE_CHOICE_KEY, voiceSelect.value));
-  testVoiceBtn.onclick = ()=> speakSample('태초에 하나님이 천지를 창조하시니라.');
-}
-function resolveVoiceChoice(){
-  try{ return JSON.parse(localStorage.getItem(VOICE_CHOICE_KEY)||'{"type":"default"}'); }
-  catch{ return {type:'default'}; }
-}
-function pickVoiceByURI(uri){ return (speechSynthesis.getVoices?.()||[]).find(v=>v.voiceURI===uri) || null; }
-function applyVoice(u){
-  const choice = resolveVoiceChoice();
-  const baseRate = parseFloat(rateCtl.value||'0.95');
-  const basePitch = parseFloat(pitchCtl.value||'1');
-  if(choice.type==='voice'){
-    const v = pickVoiceByURI(choice.uri);
-    if(v){ u.voice = v; u.lang = v.lang; } else { u.lang = 'ko-KR'; }
-    u.rate = baseRate; u.pitch = basePitch;
-  } else if(choice.type==='preset'){
-    u.lang = 'ko-KR';
-    u.rate = clamp((choice.rate ?? 0.95) * baseRate / 0.95, 0.5, 2);
-    u.pitch = clamp((choice.pitch ?? 1.0) * basePitch / 1.0, 0, 2);
-  } else {
-    u.lang = 'ko-KR'; u.rate = baseRate; u.pitch = basePitch;
+
+  voiceSelect.addEventListener('change', () => {
+    localStorage.setItem(VOICE_CHOICE_KEY, voiceSelect.value);
+  });
+
+  // 샘플 읽기 버튼도 안전 바인딩
+  if (testVoiceBtn) {
+    testVoiceBtn.onclick = () => speakSample('태초에 하나님이 천지를 창조하시니라.');
   }
 }
-function clamp(n,min,max){ return Math.max(min, Math.min(max,n)); }
-function speakSample(text){
-  const synth = window.speechSynthesis;
-  try{ synth.cancel(); }catch(e){}
-  const u = new SpeechSynthesisUtterance(text);
-  applyVoice(u);
-  synth.speak(u);
-}
+
 
 /* --------- Tree --------- */
 function buildTree(){
@@ -1980,8 +2097,8 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   }
 })();
 
-  /* ===== FmtIO (메인 전역) — 서식 내보내기/가져오기 ===== */
-  (function(){
+/* ===== FmtIO (메인 전역) — 서식 내보내기/가져오기 ===== */
+(function(){
     const VERSE_SELECTOR = '.pline';
     const PARA_ATTR = 'data-para-id';
   
