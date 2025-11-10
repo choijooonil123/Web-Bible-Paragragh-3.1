@@ -2167,3 +2167,84 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
 
 
 })();  
+
+/* ===== FmtIO 보강: 팝업에서도 동작 + 버튼/라인 존재 검증 + 진단 로그 ===== */
+(function(){
+  // 1) 팝업에서 "내보내기/가져오기" 눌렀을 때, 자동으로 부모창으로 위임
+  if (window.opener && !document.querySelector('.pline')) {
+    // 팝업 안에 버튼이 있다면 클릭 시 부모창에 위임
+    const ex = document.getElementById('btnFmtExport');
+    const im = document.getElementById('btnFmtImport');
+    const fi = document.getElementById('fmtImportFile');
+
+    if (ex && !ex._fmtBound) {
+      ex._fmtBound = 1;
+      ex.addEventListener('click', (e)=>{
+        e.preventDefault();
+        try{
+          window.opener.postMessage({type:'wbps-fmt-export'}, '*');
+          alert('메인 화면으로 내보내기 요청을 보냈습니다. (팝업에는 절 라인이 없습니다)');
+        }catch(err){
+          console.error('[FmtIO] popup export delegation failed', err);
+          alert('내보내기 요청 전달에 실패했습니다. 콘솔을 확인하세요.');
+        }
+      });
+    }
+    if (im && !im._fmtBound) {
+      im._fmtBound = 1;
+      im.addEventListener('click', (e)=>{
+        e.preventDefault();
+        alert('서식 가져오기는 메인 성경 화면에서 실행하세요. (팝업에는 적용할 절 라인이 없습니다)');
+      });
+    }
+    if (fi) fi.disabled = true; // 팝업에서는 가져오기 비활성화
+  }
+
+  // 2) 부모창에서 팝업이 보낸 내보내기 메시지를 처리
+  window.addEventListener('message', (ev)=>{
+    const data = ev && ev.data;
+    if (!data || data.type !== 'wbps-fmt-export') return;
+
+    try{
+      if (!window.FmtIO || typeof window.FmtIO.buildJSON !== 'function'){
+        alert('FmtIO가 초기화되지 않았습니다. (메인 화면 스크립트 확인)');
+        return;
+      }
+      const payload = window.FmtIO.buildJSON();
+      if (!payload.items || payload.items.length === 0){
+        alert('내보낼 서식이 없습니다.\n메인 성경 화면(절 라인이 보이는 화면)에서 실행하세요.');
+        return;
+      }
+      const ts = new Date();
+      const y = ts.getFullYear();
+      const m = String(ts.getMonth()+1).padStart(2,'0');
+      const d = String(ts.getDate()).padStart(2,'0');
+      const hh= String(ts.getHours()).padStart(2,'0');
+      const mm= String(ts.getMinutes()).padStart(2,'0');
+      const file = `wbps-format-runs-${y}${m}${d}-${hh}${mm}.json`;
+
+      window.FmtIO.download(payload, file);
+      if (typeof status === 'function') status('서식을 JSON으로 내보냈습니다. (팝업 요청)');
+    }catch(err){
+      console.error('[FmtIO] parent export from popup msg failed', err);
+      alert('서식 내보내기에 실패했습니다. 콘솔을 확인하세요.');
+    }
+  });
+
+  // 3) 진단 모드(선택): 내보내기 직전 .pline 유무와 data-para-id 점검
+  function diagnoseFmtSurface(){
+    const lines = Array.from(document.querySelectorAll('.pline'));
+    const head  = document.querySelector('header');
+    console.log('[FmtIO] diagnose:',
+      { plineCount: lines.length, headerExists: !!head }
+    );
+    if (lines.length === 0){
+      console.warn('[FmtIO] 현재 문서에는 .pline이 없습니다. (팝업/에디터 화면일 가능성)');
+    } else {
+      const para = lines[0].closest('[data-para-id]');
+      if (!para) console.warn('[FmtIO] .pline 상위에 data-para-id가 없습니다. id 안정성이 떨어질 수 있습니다.');
+    }
+  }
+  // 개발시에만 주석 해제하여 확인하세요.
+  // diagnoseFmtSurface();
+})();
