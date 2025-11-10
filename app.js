@@ -2429,4 +2429,5 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   }
   // 개발시에만 주석 해제하여 확인하세요.
   // diagnoseFmtSurface();
+  }
 })();
