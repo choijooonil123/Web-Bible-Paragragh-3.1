@@ -2294,37 +2294,96 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
 
 })();  
 
+// === 강제 보정: 헤더/버튼이 늦게 생겨도 반드시 바인딩 ===
+(function ensureFmtButtonsAlways() {
+  const TRY_MS = 1500; // 최대 1.5초 재시도
+  let tries = 0;
+
+  function tryOnce() {
+    tries++;
+    // 버튼 없으면 생성
+    const { ex, im, fi } = (window.FmtIO && window.FmtIO.ensure) ? window.FmtIO.ensure() : (function(){
+      const host = (document.querySelector('header') || document.body);
+      let ex = document.getElementById('btnFmtExport');
+      let im = document.getElementById('btnFmtImport');
+      let fi = document.getElementById('fmtImportFile');
+      if(!ex){ ex=document.createElement('button'); ex.id='btnFmtExport'; ex.type='button'; ex.textContent='서식 내보내기'; host.appendChild(ex); }
+      if(!im){ im=document.createElement('button'); im.id='btnFmtImport'; im.type='button'; im.textContent='서식 가져오기'; host.appendChild(im); }
+      if(!fi){ fi=document.createElement('input'); fi.id='fmtImportFile'; fi.type='file'; fi.accept='application/json'; fi.hidden=true; host.appendChild(fi); }
+      return {ex, im, fi};
+    })();
+
+    // 위임 리스너가 아직이면 다시 시도
+    if (!document._wbpFmtDelegated) {
+      try { typeof safeBindFmtButtons === 'function' && safeBindFmtButtons(); } catch(_){}
+    }
+
+    // 혹시 몰라 직접 바인딩도 한 겹 추가
+    if (ex && !ex._directBound) {
+      ex._directBound = 1;
+      ex.addEventListener('click', (e) => {
+        e.preventDefault();
+        try {
+          const data = window.FmtIO.buildJSON();
+          if (!data.items || data.items.length === 0) {
+            alert('내보낼 서식이 없습니다.\n메인 성경 화면(절 라인 .pline)에서 실행하세요.');
+            return;
+          }
+          const ts = new Date();
+          const y = ts.getFullYear(), m = String(ts.getMonth()+1).padStart(2,'0'), d = String(ts.getDate()).padStart(2,'0');
+          const hh= String(ts.getHours()).padStart(2,'0'), mm=String(ts.getMinutes()).padStart(2,'0');
+          window.FmtIO.download(data, `wbps-format-runs-${y}${m}${d}-${hh}${mm}.json`);
+          typeof status === 'function' && status('서식을 JSON으로 내보냈습니다.');
+        } catch(err) {
+          console.error('[FmtIO] direct export failed', err);
+          alert('서식 내보내기에 실패했습니다. 콘솔을 확인하세요.');
+        }
+      });
+    }
+    if (im && !im._directBound) {
+      im._directBound = 1;
+      im.addEventListener('click', (e)=>{
+        e.preventDefault();
+        const fi = document.getElementById('fmtImportFile');
+        fi && fi.click();
+      });
+    }
+
+    if (document._wbpFmtDelegated || tries * 100 >= TRY_MS) return;
+    setTimeout(tryOnce, 100);
+  }
+
+  tryOnce();
+  document.addEventListener('wbp:treeBuilt', () => setTimeout(tryOnce, 0));
+  new MutationObserver(()=> setTimeout(tryOnce, 0))
+    .observe(document.documentElement, { childList: true, subtree: true });
+})();
+
 /* ===== FmtIO 보강: 팝업에서도 동작 + 버튼/라인 존재 검증 + 진단 로그 ===== */
 (function(){
   // 1) 팝업에서 "내보내기/가져오기" 눌렀을 때, 자동으로 부모창으로 위임
   if (window.opener && !document.querySelector('.pline')) {
-    // 팝업 안에 버튼이 있다면 클릭 시 부모창에 위임
+    // 1) 팝업: .pline이 없으면 "내보내기" 클릭 시 부모창에 즉시 실행 요청
+    if (window.opener && !document.querySelector('.pline')) {
     const ex = document.getElementById('btnFmtExport');
     const im = document.getElementById('btnFmtImport');
     const fi = document.getElementById('fmtImportFile');
 
-    if (ex && !ex._fmtBound) {
-      ex._fmtBound = 1;
-      ex.addEventListener('click', (e)=>{
-        e.preventDefault();
-        try{
-          window.opener.postMessage({type:'wbps-fmt-export'}, '*');
-          alert('메인 화면으로 내보내기 요청을 보냈습니다. (팝업에는 절 라인이 없습니다)');
-        }catch(err){
-          console.error('[FmtIO] popup export delegation failed', err);
-          alert('내보내기 요청 전달에 실패했습니다. 콘솔을 확인하세요.');
+    const delegateExport = () => {
+        try {
+        window.opener.postMessage({ type:'wbps-fmt-export' }, '*');
+        alert('메인 화면으로 내보내기를 실행했습니다. (팝업에는 절 라인이 없습니다)');
+        } catch (err) {
+        console.error('[FmtIO] popup->parent export delegation failed', err);
+        alert('내보내기 요청 전달에 실패했습니다. 콘솔을 확인하세요.');
         }
-      });
+    };
+
+    if (ex && !ex._fmtBound) { ex._fmtBound = 1; ex.addEventListener('click', (e)=>{ e.preventDefault(); delegateExport(); }); }
+    if (im && !im._fmtBound) { im._fmtBound = 1; im.addEventListener('click', (e)=>{ e.preventDefault(); alert('가져오기는 메인 성경 화면에서 실행하세요.'); }); }
+    if (fi) fi.disabled = true;
     }
-    if (im && !im._fmtBound) {
-      im._fmtBound = 1;
-      im.addEventListener('click', (e)=>{
-        e.preventDefault();
-        alert('서식 가져오기는 메인 성경 화면에서 실행하세요. (팝업에는 적용할 절 라인이 없습니다)');
-      });
-    }
-    if (fi) fi.disabled = true; // 팝업에서는 가져오기 비활성화
-  }
+
 
   // 2) 부모창에서 팝업이 보낸 내보내기 메시지를 처리
   window.addEventListener('message', (ev)=>{
