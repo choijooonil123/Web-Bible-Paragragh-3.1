@@ -1977,6 +1977,7 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
       setTimeout(showBar,0);
     }
   });
+  })();  
 
   /* ===== FmtIO (메인 전역) — 서식 내보내기/가져오기 ===== */
   (function(){
@@ -2163,5 +2164,4 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   }
   document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
 
-})();  
 })();  
