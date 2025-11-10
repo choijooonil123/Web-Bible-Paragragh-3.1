@@ -1879,105 +1879,106 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   const bar = document.getElementById('vbar');
   const color = document.getElementById('vcolor');
   const docEl = document.getElementById('doc');
-  if(!bar || !docEl) return;
+  // 툴바 요소가 있을 때만 툴바 로직을 실행하도록 변경
+  if (bar && docEl) {
+    let savedRange = null;
 
-  let savedRange = null;
-
-  function inVerse(){
-    const sel = window.getSelection();
-    if(!sel || sel.rangeCount===0) return false;
-    const c = sel.getRangeAt(0).commonAncestorContainer;
-    const el = (c.nodeType===1 ? c : c.parentElement);
-    return !!(el && docEl.contains(el) && el.closest('.verse'));
-  }
-  function saveSel(){
-    const sel = window.getSelection();
-    if(sel && sel.rangeCount>0) savedRange = sel.getRangeAt(0).cloneRange();
-  }
-  function restoreSel(){
-    if(!savedRange) return false;
-    const sel = window.getSelection();
-    sel.removeAllRanges(); sel.addRange(savedRange);
-    return true;
-  }
-  function selRect(){
-    const sel = window.getSelection();
-    if(!sel || sel.rangeCount===0) return null;
-    const r = sel.getRangeAt(0).cloneRange();
-    let rect = r.getBoundingClientRect();
-    if(!rect || (rect.width===0 && rect.height===0)){
-      const span = document.createElement('span');
-      span.appendChild(document.createTextNode('\u200b'));
-      r.insertNode(span);
-      rect = span.getBoundingClientRect();
-      span.remove();
+    function inVerse(){
+        const sel = window.getSelection();
+        if(!sel || sel.rangeCount===0) return false;
+        const c = sel.getRangeAt(0).commonAncestorContainer;
+        const el = (c.nodeType===1 ? c : c.parentElement);
+        return !!(el && docEl.contains(el) && el.closest('.verse'));
     }
-    return rect;
+    function saveSel(){
+        const sel = window.getSelection();
+        if(sel && sel.rangeCount>0) savedRange = sel.getRangeAt(0).cloneRange();
+    }
+    function restoreSel(){
+        if(!savedRange) return false;
+        const sel = window.getSelection();
+        sel.removeAllRanges(); sel.addRange(savedRange);
+        return true;
+    }
+    function selRect(){
+        const sel = window.getSelection();
+        if(!sel || sel.rangeCount===0) return null;
+        const r = sel.getRangeAt(0).cloneRange();
+        let rect = r.getBoundingClientRect();
+        if(!rect || (rect.width===0 && rect.height===0)){
+        const span = document.createElement('span');
+        span.appendChild(document.createTextNode('\u200b'));
+        r.insertNode(span);
+        rect = span.getBoundingClientRect();
+        span.remove();
+        }
+        return rect;
+    }
+    function showBar(){
+        const sel = window.getSelection();
+        if(!sel || sel.isCollapsed || !inVerse()){ hide(); return; }
+        const rect = selRect(); if(!rect){ hide(); return; }
+        bar.style.left = (rect.left + rect.width/2) + 'px';
+        bar.style.top  = rect.top + 'px';
+        bar.hidden = false;
+        saveSel();
+    }
+    function hide(){ bar.hidden = true; }
+
+    bar.addEventListener('mousedown', e=> e.preventDefault());
+    bar.addEventListener('click', e=>{
+        const btn = e.target.closest('button'); if(!btn) return;
+        if(!restoreSel()) return;
+
+        const cmd = btn.dataset.cmd;
+        const act = btn.dataset.act;
+        if(cmd){
+        document.execCommand(cmd,false,null);
+        saveSel(); showBar();
+        return;
+        }
+        if(act==='clearColor'){
+        try{
+            const sel = window.getSelection(); if(!sel || sel.rangeCount===0) return;
+            const range = sel.getRangeAt(0);
+            const frag  = range.cloneContents();
+            const div   = document.createElement('div'); div.appendChild(frag);
+            div.querySelectorAll('span, font').forEach(n=>{
+            if(n.style?.color) n.style.color = '';
+            if(n.hasAttribute?.('color')) n.removeAttribute('color');
+            });
+            range.deleteContents();
+            document.execCommand('insertHTML', false, div.innerHTML);
+        }catch(_){}
+        saveSel(); showBar();
+        }
+    });
+    color?.addEventListener('input', ()=>{
+        if(!restoreSel()) return;
+        document.execCommand('foreColor', false, color.value);
+        saveSel(); showBar();
+    });
+
+    document.addEventListener('selectionchange', ()=>{
+        if(inVerse()) showBar(); else hide();
+    });
+    docEl.addEventListener('mouseup', ()=> setTimeout(showBar, 0));
+    docEl.addEventListener('keyup',   ()=> setTimeout(showBar, 0));
+    window.addEventListener('scroll', hide, {passive:true});
+    window.addEventListener('resize', hide);
+
+    window.addEventListener('keydown', (e)=>{
+        if(!inVerse()) return;
+        if(!(e.ctrlKey||e.metaKey)) return;
+        const k=e.key.toLowerCase();
+        if(['b','i','u'].includes(k)){
+        e.preventDefault();
+        document.execCommand(k==='b'?'bold':k==='i'?'italic':'underline',false,null);
+        setTimeout(showBar,0);
+        }
+    });
   }
-  function showBar(){
-    const sel = window.getSelection();
-    if(!sel || sel.isCollapsed || !inVerse()){ hide(); return; }
-    const rect = selRect(); if(!rect){ hide(); return; }
-    bar.style.left = (rect.left + rect.width/2) + 'px';
-    bar.style.top  = rect.top + 'px';
-    bar.hidden = false;
-    saveSel();
-  }
-  function hide(){ bar.hidden = true; }
-
-  bar.addEventListener('mousedown', e=> e.preventDefault());
-  bar.addEventListener('click', e=>{
-    const btn = e.target.closest('button'); if(!btn) return;
-    if(!restoreSel()) return;
-
-    const cmd = btn.dataset.cmd;
-    const act = btn.dataset.act;
-    if(cmd){
-      document.execCommand(cmd,false,null);
-      saveSel(); showBar();
-      return;
-    }
-    if(act==='clearColor'){
-      try{
-        const sel = window.getSelection(); if(!sel || sel.rangeCount===0) return;
-        const range = sel.getRangeAt(0);
-        const frag  = range.cloneContents();
-        const div   = document.createElement('div'); div.appendChild(frag);
-        div.querySelectorAll('span, font').forEach(n=>{
-          if(n.style?.color) n.style.color = '';
-          if(n.hasAttribute?.('color')) n.removeAttribute('color');
-        });
-        range.deleteContents();
-        document.execCommand('insertHTML', false, div.innerHTML);
-      }catch(_){}
-      saveSel(); showBar();
-    }
-  });
-  color?.addEventListener('input', ()=>{
-    if(!restoreSel()) return;
-    document.execCommand('foreColor', false, color.value);
-    saveSel(); showBar();
-  });
-
-  document.addEventListener('selectionchange', ()=>{
-    if(inVerse()) showBar(); else hide();
-  });
-  docEl.addEventListener('mouseup', ()=> setTimeout(showBar, 0));
-  docEl.addEventListener('keyup',   ()=> setTimeout(showBar, 0));
-  window.addEventListener('scroll', hide, {passive:true});
-  window.addEventListener('resize', hide);
-
-  window.addEventListener('keydown', (e)=>{
-    if(!inVerse()) return;
-    if(!(e.ctrlKey||e.metaKey)) return;
-    const k=e.key.toLowerCase();
-    if(['b','i','u'].includes(k)){
-      e.preventDefault();
-      document.execCommand(k==='b'?'bold':k==='i'?'italic':'underline',false,null);
-      setTimeout(showBar,0);
-    }
-  });
-  })();  
+})();
 
   /* ===== FmtIO (메인 전역) — 서식 내보내기/가져오기 ===== */
   (function(){
@@ -2157,11 +2158,12 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
       }
     }
   
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', safeBindFmtButtons);
-  } else {
-    safeBindFmtButtons();
-  }
-  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', safeBindFmtButtons);
+    } else {
+        safeBindFmtButtons();
+    }
+    document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
+
 
 })();  
