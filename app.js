@@ -1,21 +1,15 @@
 /* --------- Utils --------- */
 
-// ===== [FORMAT-PERSIST/RUNS] 위치정보(오프셋) 추출 유틸 BEGIN =====
+// ===== [FORMAT-PERSIST/RUNS] 위치정보(오프셋) 추출 및 HTML 재구성 유틸 BEGIN =====
 function _collectTextAndRuns(rootEl){
-  // DOM을 DFS로 순회하며 순수 텍스트와 서식범위(spans)를 수집
   const spans = [];
   let text = '';
   let offset = 0;
-
-  // 현재 활성화된 서식 스택
   const active = [];
 
   function pushSpan(start, end, attrs){
-    if (end <= start) return;
-    // 같은 속성의 연속 구간 병합 여지 있음(간단화를 위해 생략)
-    spans.push({ start, end, attrs: { ...attrs } });
+    if (end > start) spans.push({ start, end, attrs: { ...attrs } });
   }
-
   function attrsFromEl(el){
     const a = {};
     const tag = el.tagName?.toLowerCase?.() || '';
@@ -24,144 +18,100 @@ function _collectTextAndRuns(rootEl){
     if (tag === 'u')                      a.u = true;
     if (tag === 's' || tag === 'strike')  a.s = true;
     if (tag === 'mark')                   a.mark = true;
-    // color
     const color = (el.style && el.style.color) || el.getAttribute?.('color');
     if (color) a.color = color;
     return a;
   }
-
   function walk(node){
+    if (!node) return;
     if (node.nodeType === Node.TEXT_NODE) {
       const chunk = node.nodeValue || '';
-      if (chunk.length > 0) {
-        const start = offset;
-        text += chunk;
-        offset += [...chunk].length; // 유니코드 안전
-        // 현재 활성 모든 속성을 이 텍스트 구간에 적용
-        for (const a of active) {
-          pushSpan(start, offset, a);
-        }
-      }
+      const start = offset;
+      const cps = [...chunk]; // 유니코드 안전
+      text += chunk; offset += cps.length;
+      for (const a of active) pushSpan(start, offset, a);
       return;
     }
     if (node.nodeType === Node.ELEMENT_NODE) {
-      // 현재 노드가 부여하는 속성(있으면 스택에 push)
       const attrs = attrsFromEl(node);
-      const hasAny = Object.keys(attrs).length > 0;
-      if (hasAny) active.push(attrs);
-
-      // 자식 순회
-      for (let child = node.firstChild; child; child = child.nextSibling) {
-        walk(child);
-      }
-
-      // 스택 pop
-      if (hasAny) active.pop();
+      const has = Object.keys(attrs).length > 0;
+      if (has) active.push(attrs);
+      for (let c=node.firstChild; c; c=c.nextSibling) walk(c);
+      if (has) active.pop();
     }
-    // 그 외 노드타입은 무시
   }
-
   walk(rootEl);
   return { text, spans };
 }
 
 function _wrapRunsToHTML(text, spans){
-  // runs를 이용해 최소 래퍼로 HTML 재구성 (단순 구현)
-  // 전략: 문자 단위로 스캔하면서 "현재 적용중인 attrs 집합"이 바뀔 때 래퍼를 열고 닫음
-  const cps = [...text]; // 코드포인트 배열
-  const open = []; // 현재 열려 있는 래퍼 스택 (attrs)
-  const out = [];
-
-  function attrsKey(a){ return JSON.stringify(a||{}); }
-
-  // 각 오프셋에서 시작/끝나는 runs 인덱스 준비
+  // 안전한 HTML 생성: 단순 병합 방식 (중첩을 단순화하여 출력)
+  const cps = [...text]; // 문자 배열 (유니코드 안전)
+  // 준비: 위치별 시작/끝 맵
   const starts = new Map(), ends = new Map();
-  spans.forEach(sp=>{
-    (starts.get(sp.start) || starts.set(sp.start, [])).get(sp.start).push(sp);
-  });
-  spans.forEach(sp=>{
-    (ends.get(sp.end) || ends.set(sp.end, [])).get(sp.end).push(sp);
+  spans.forEach(sp => {
+    if (!starts.has(sp.start)) starts.set(sp.start, []);
+    starts.get(sp.start).push(sp);
+    if (!ends.has(sp.end)) ends.set(sp.end, []);
+    ends.get(sp.end).push(sp);
   });
 
-  // Map 빌드 보정 (위에서 set().get()은 다소 장황하니 보정)
-  function addMapArr(map, k, v){
-    if(!map.has(k)) map.set(k, []);
-    map.get(k).push(v);
-  }
-  const s2 = new Map(), e2 = new Map();
-  spans.forEach(sp=> addMapArr(s2, sp.start, sp));
-  spans.forEach(sp=> addMapArr(e2, sp.end, sp));
-
-  // 도움: attrs → 오픈 태그 문자열
+  // 도움함수: attrs -> 오픈/클로즈 태그
   function openTags(a){
-    const t = [];
-    if(a.b) t.push('<b>');
-    if(a.i) t.push('<i>');
-    if(a.u) t.push('<u>');
-    if(a.s) t.push('<s>');
-    if(a.mark) t.push('<mark>');
-    if(a.color) t.push(`<span style="color:${a.color}">`);
-    return t.join('');
+    let out = '';
+    if (a.b) out += '<b>';
+    if (a.i) out += '<i>';
+    if (a.u) out += '<u>';
+    if (a.s) out += '<s>';
+    if (a.mark) out += '<mark>';
+    if (a.color) out += `<span style="color:${a.color}">`;
+    return out;
   }
-  // 도움: attrs → 클로즈 태그 문자열 (역순)
   function closeTags(a){
-    const t = [];
-    if(a.color) t.push('</span>');
-    if(a.mark) t.push('</mark>');
-    if(a.s) t.push('</s>');
-    if(a.u) t.push('</u>');
-    if(a.i) t.push('</i>');
-    if(a.b) t.push('</b>');
-    return t.join('');
+    let out = '';
+    if (a.color) out += '</span>';
+    if (a.mark) out += '</mark>';
+    if (a.s) out += '</s>';
+    if (a.u) out += '</u>';
+    if (a.i) out += '</i>';
+    if (a.b) out += '</b>';
+    return out;
   }
 
-  // 현재 활성 attrs 집합을 단일 attrs로 합치기 (겹침 단순화)
-  function mergeActive(){
-    const m = {};
-    for(const a of open){
-      if(a.b) m.b = true;
-      if(a.i) m.i = true;
-      if(a.u) m.u = true;
-      if(a.s) m.s = true;
-      if(a.mark) m.mark = true;
-      if(a.color) m.color = a.color; // 마지막 color 우선
-    }
-    return m;
-  }
-
-  for(let i=0;i<=cps.length;i++){
-    // i 위치에서 끝나는 것들 먼저 닫기
-    if(e2.has(i)){
-      // 끝나는 spans의 attrs를 pop (단순히 스택에서 일치하는 하나 제거)
-      // 정확한 중첩 순서 유지까지는 복잡하므로, 여기서는 전체를 닫고 다시 여는 전략 사용
-      const toEnd = e2.get(i);
-      if(toEnd.length){
-        const cur = mergeActive();
-        out.push(closeTags(cur));
-        open.length = 0;
+  // 현재 활성 attrs 스택(간단 합산 전략)
+  const active = [];
+  const out = [];
+  for (let i=0;i<=cps.length;i++){
+    // 닫기
+    if (ends.has(i)){
+      // 단순 처리: 모든 닫기 -> 닫고 스택 비움
+      if (active.length){
+        // 합쳐진 attrs로 닫기
+        const merged = active.reduce((m,a)=>Object.assign(m,a),{});
+        out.push(closeTags(merged));
+        active.length = 0;
       }
     }
-    // i 위치에서 시작하는 것들 열기
-    if(s2.has(i)){
-      const toStart = s2.get(i);
-      if(toStart.length){
-        // 시작 구간 전체 합쳐서 한 번에 오픈(간단화)
+    // 열기
+    if (starts.has(i)){
+      const list = starts.get(i);
+      if (list && list.length){
+        // 시작들의 attrs 병합하여 오픈, 그리고 스택에 푸시
         const merged = {};
-        for(const sp of toStart){
-          const a = sp.attrs||{};
-          if(a.b) merged.b = true;
-          if(a.i) merged.i = true;
-          if(a.u) merged.u = true;
-          if(a.s) merged.s = true;
-          if(a.mark) merged.mark = true;
-          if(a.color) merged.color = a.color;
-          open.push(a);
+        for (const sp of list){
+          const a = sp.attrs || {};
+          if (a.b) merged.b = true;
+          if (a.i) merged.i = true;
+          if (a.u) merged.u = true;
+          if (a.s) merged.s = true;
+          if (a.mark) merged.mark = true;
+          if (a.color) merged.color = a.color;
+          active.push(a);
         }
         out.push(openTags(merged));
       }
     }
-    // 문자 출력 (마지막 루프 i==len에서는 문자 없음)
-    if(i < cps.length){
+    if (i < cps.length){
       const ch = cps[i]
         .replace(/&/g,'&amp;')
         .replace(/</g,'&lt;')
@@ -169,16 +119,15 @@ function _wrapRunsToHTML(text, spans){
       out.push(ch);
     }
   }
-  // 남은 것 닫기
-  if(open.length){
-    const cur = mergeActive();
-    out.push(closeTags(cur));
+  if (active.length){
+    const merged = active.reduce((m,a)=>Object.assign(m,a),{});
+    out.push(closeTags(merged));
   }
   return out.join('');
 }
-// ===== [FORMAT-PERSIST/RUNS] 위치정보(오프셋) 추출 유틸 END =====
+// ===== [FORMAT-PERSIST/RUNS] END =====
 
-// ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage) BEGIN =====
+// ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage, v2 runs) BEGIN =====
 const FMT_NS = 'WBP3_FMT';
 
 function getOpenParaKeyAndEls(){
@@ -186,16 +135,15 @@ function getOpenParaKeyAndEls(){
   const openPara = document.querySelector('details.para[open]');
   if(!openPara) return null;
 
-  // summary .ptitle 안에 data-book, data-ch, data-idx가 이미 존재(프로젝트 기존 코드에 근거)
   const t = openPara.querySelector('summary .ptitle');
   if(!t) return null;
+
   const book = t.dataset.book;
   const ch   = t.dataset.ch;
   const idx  = t.dataset.idx;
   if(!book || !ch || !idx) return null;
 
-  // 라인(절문장) 엘리먼트 수집: .pline 내부의 실제 텍스트 컨테이너를 우선적으로 잡습니다.
-  // (프로젝트 구조에 따라 .content가 없을 수도 있으므로 fallback 포함)
+  // 절문장(라인) 엘리먼트 수집: .pline .content 우선, 없으면 .pline 자체
   const candidates = openPara.querySelectorAll('.pline .content, .pline');
   const lineEls = Array.from(candidates).filter(el => !el.matches('details, summary'));
 
@@ -207,31 +155,22 @@ function saveFormatForOpenPara(){
   const ctx = getOpenParaKeyAndEls();
   if(!ctx){ alert('열려있는 단락을 찾을 수 없습니다.'); return; }
 
-  // 절문장 단위: innerHTML 스냅샷 + runs 동시 저장 (v:2)
   const lines = ctx.lineEls.map(el => {
-    const root = el.matches('.content') ? el : el.querySelector('.content') || el;
+    const root = el.matches('.content') ? el : (el.querySelector('.content') || el);
     const { text, spans } = _collectTextAndRuns(root);
-    return {
-      html: el.innerHTML,   // 기존 스냅샷 (백업/하위호환)
-      text,                 // 순수 텍스트
-      spans                 // 위치정보 포함 서식 runs
-    };
+    return { html: root.innerHTML, text, spans };
   });
 
-  const payload = {
-    v: 2,
-    savedAt: Date.now(),
-    lines
-  };
-
+  const payload = { v: 2, savedAt: Date.now(), lines };
   try{
     localStorage.setItem(ctx.key, JSON.stringify(payload));
-    status && status('서식 저장 완료(v2: 위치정보 포함)');
+    status && status('서식 저장 완료 (정밀: 위치정보 포함)');
   }catch(e){
     console.error(e);
     alert('서식 저장 중 오류가 발생했습니다.');
   }
 }
+
 
 function restoreFormatForOpenPara(){
   const ctx = getOpenParaKeyAndEls();
@@ -241,100 +180,101 @@ function restoreFormatForOpenPara(){
   if(!raw){ alert('저장된 서식이 없습니다. 먼저 [서식저장]을 실행하세요.'); return; }
 
   let data;
-  try{ data = JSON.parse(raw); }catch(e){
-    console.error(e); alert('저장된 서식 데이터를 읽는 중 오류가 발생했습니다.'); return;
-  }
-  if(!data || !Array.isArray(data.lines)){
-    alert('저장된 서식 형식이 올바르지 않습니다.'); return;
-  }
-
-  const USE_RUNS_ON_RESTORE = false; // ← 필요 시 true로 바꾸면 위치정보 기반 정밀 복원
+  try{ data = JSON.parse(raw); }catch(e){ console.error(e); alert('저장된 서식 데이터를 읽는 중 오류가 발생했습니다.'); return; }
+  if(!data || !Array.isArray(data.lines)){ alert('저장된 서식 형식이 올바르지 않습니다.'); return; }
 
   const n = Math.min(ctx.lineEls.length, data.lines.length);
-  for(let i=0;i<n;i++){
+  for (let i=0;i<n;i++){
     const lineEl = ctx.lineEls[i];
     const rec = data.lines[i];
+    if(!rec) continue;
 
-    if(!USE_RUNS_ON_RESTORE || !rec || !rec.text || !Array.isArray(rec.spans)){
-      // 기본(안전) 경로: HTML 스냅샷 사용 (v:1과 동일 동작)
-      const html = (typeof rec === 'string') ? rec : (rec?.html || '');
-      if(html) lineEl.innerHTML = html;
-      continue;
+    // 우선 시도: runs 텍스트+spans 기반 정밀 복원 (v2)
+    if (rec.text && Array.isArray(rec.spans)){
+      try{
+        const rebuilt = _wrapRunsToHTML(rec.text, rec.spans);
+        const root = lineEl.matches('.content') ? lineEl : (lineEl.querySelector('.content') || lineEl);
+        root.innerHTML = rebuilt;
+        continue;
+      }catch(e){
+        console.error('runs 복원 실패, HTML 복원으로 대체:', e);
+      }
     }
 
-    // runs 정밀 복원 경로
-    const rebuilt = _wrapRunsToHTML(rec.text, rec.spans);
-    // .content가 있으면 내부만 교체, 없으면 자기 자신
-    const root = lineEl.matches('.content') ? lineEl : (lineEl.querySelector('.content') || lineEl);
-    root.innerHTML = rebuilt;
+    // fallback: 기존 html 스냅샷 복원
+    const html = (typeof rec === 'string') ? rec : (rec.html || '');
+    if(html){
+      const root = lineEl.matches('.content') ? lineEl : (lineEl.querySelector('.content') || lineEl);
+      root.innerHTML = html;
+    }
   }
-  status && status('서식 복원 완료' + (USE_RUNS_ON_RESTORE ? '(runs)' : '(html)'));
+  status && status('서식 복원 완료');
 }
 
-// ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage) END =====
+// ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage, v2 runs) END =====
 
+// ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 BEGIN =====
 // ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 BEGIN =====
 function ensureFormatButtons(){
   const doc = document;
 
-  // 1️⃣ 기준 버튼 찾기: "서식초기화" 버튼을 앵커로
+  // 1) 우선 "서식초기화" 버튼 앵커 찾기 (id 우선, 텍스트 포함 검색)
   let anchor =
     doc.getElementById('btnFmtReset') ||
-    Array.from(doc.querySelectorAll('button')).find(b =>
-      (b.textContent || '').trim().includes('서식초기화')
-    );
+    Array.from(doc.querySelectorAll('button')).find(b => (b.textContent||'').trim().includes('서식초기화'));
 
-  // 2️⃣ 찾지 못하면 header 안 또는 body에 임시로 생성
+  // 2) 호스트 fallback
   const headerEl = doc.querySelector('header');
   const host = (anchor && anchor.parentElement) || headerEl || doc.body;
 
-  // 3️⃣ 이미 버튼 있으면 재배치만 (중복 생성 방지)
+  // 3) 중복 생성 방지 + 재배치 로직
   const existSave = doc.getElementById('btnFmtSave');
   const existLoad = doc.getElementById('btnFmtLoad');
   if (existSave && existLoad) {
     if (anchor && existLoad.nextElementSibling !== anchor) {
-      // 앵커 앞쪽에 재배치
       anchor.insertAdjacentElement('beforebegin', existLoad);
       anchor.insertAdjacentElement('beforebegin', existSave);
     }
     return;
   }
 
-  // 4️⃣ 새 버튼 생성
+  // 4) 새 버튼 생성
   const btnSave = doc.createElement('button');
   btnSave.id = 'btnFmtSave';
   btnSave.type = 'button';
   btnSave.textContent = '서식저장';
-  btnSave.style.marginRight = '4px';
-  btnSave.style.padding = '6px 10px';
-  btnSave.style.border = '1px solid #555';
-  btnSave.style.background = '#1e1f26';
-  btnSave.style.color = '#e6e8ef';
-  btnSave.style.borderRadius = '4px';
-  btnSave.style.cursor = 'pointer';
+  btnSave.style.marginRight = '6px';
+  btnSave.className = 'fmt-btn';
 
   const btnLoad = doc.createElement('button');
   btnLoad.id = 'btnFmtLoad';
   btnLoad.type = 'button';
   btnLoad.textContent = '서식회복';
-  btnLoad.style.marginRight = '4px';
-  btnLoad.style.padding = '6px 10px';
-  btnLoad.style.border = '1px solid #555';
-  btnLoad.style.background = '#1e1f26';
-  btnLoad.style.color = '#e6e8ef';
-  btnLoad.style.borderRadius = '4px';
-  btnLoad.style.cursor = 'pointer';
+  btnLoad.style.marginRight = '6px';
+  btnLoad.className = 'fmt-btn';
 
-  // 5️⃣ 위치 삽입: "서식초기화" 버튼 바로 왼쪽
+  // 5) 삽입: anchor 왼쪽 우선, 없으면 host 끝에 붙임
   if (anchor) {
     anchor.insertAdjacentElement('beforebegin', btnLoad);
     btnLoad.insertAdjacentElement('beforebegin', btnSave);
   } else if (host) {
     host.appendChild(btnSave);
     host.appendChild(btnLoad);
+  } else {
+    // 매우 드문 경우: body에 플로팅
+    const float = doc.createElement('div');
+    float.style.position = 'fixed';
+    float.style.right = '12px';
+    float.style.bottom = '12px';
+    float.style.display = 'flex';
+    float.style.gap = '8px';
+    float.style.zIndex = '99999';
+    float.appendChild(btnSave);
+    float.appendChild(btnLoad);
+    doc.body.appendChild(float);
   }
 
-  // 6️⃣ 이벤트 연결
+  // 6) 클릭 이벤트 연결
   btnSave.addEventListener('click', saveFormatForOpenPara);
   btnLoad.addEventListener('click', restoreFormatForOpenPara);
 }
@@ -343,7 +283,7 @@ function safeBindFmtButtons(){
   try{ ensureFormatButtons(); }
   catch(e){ console.error('ensureFormatButtons error:', e); }
 }
-// ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 END =====
+// ===== [FORMAT-PERSIST UI] END =====
 
 
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
