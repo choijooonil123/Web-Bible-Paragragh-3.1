@@ -1966,6 +1966,16 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   const bar = document.getElementById('vbar');
   const color = document.getElementById('vcolor');
   const docEl = document.getElementById('doc');
+
+  // ===== [FORMAT-PERSIST INIT HOOK] BEGIN =====
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', safeBindFmtButtons);
+  } else {
+    safeBindFmtButtons();
+  }
+  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
+  // ===== [FORMAT-PERSIST INIT HOOK] END =====
+
   if(!bar || !docEl) return;
 
   let savedRange = null;
@@ -2064,14 +2074,4 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
       setTimeout(showBar,0);
     }
   });
-
-  // ===== [FORMAT-PERSIST INIT HOOK] BEGIN =====
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', safeBindFmtButtons);
-  } else {
-    safeBindFmtButtons();
-  }
-  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
-  // ===== [FORMAT-PERSIST INIT HOOK] END =====
-
 })();
