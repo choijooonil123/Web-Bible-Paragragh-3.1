@@ -76,41 +76,35 @@ function restoreFormatForOpenPara(){
 function ensureFormatButtons(){
   const doc = document;
 
-  // 1) 앵커(설교 버튼) 탐색: 여러 후보 + 텍스트 매칭
+  // 1️⃣ 기준 버튼 찾기: "서식초기화" 버튼을 앵커로
   let anchor =
-    doc.getElementById('btnSermon') ||
-    doc.querySelector('#sermonBtn, #btn-sermon, [data-action="sermon"], [data-role="sermon"]');
+    doc.getElementById('btnFmtReset') ||
+    Array.from(doc.querySelectorAll('button')).find(b =>
+      (b.textContent || '').trim().includes('서식초기화')
+    );
 
-  if(!anchor){
-    const btns = Array.from(doc.querySelectorAll('header button, .toolbar button, button'));
-    anchor = btns.find(b => (b.textContent || '').trim() === '설교') || null;
-  }
+  // 2️⃣ 찾지 못하면 header 안 또는 body에 임시로 생성
+  const headerEl = doc.querySelector('header');
+  const host = (anchor && anchor.parentElement) || headerEl || doc.body;
 
-  // 2) 호스트(붙일 자리) 확보: 설교버튼 부모 > header > statusEl 부모 > body
-  const headerEl = doc.querySelector('header') || null;
-  const host = (anchor && anchor.parentElement)
-            || headerEl
-            || (typeof statusEl !== 'undefined' && statusEl && statusEl.parentElement)
-            || doc.body;
-
-  // 3) 이미 버튼 있으면 "위치만 보정"하고 종료
+  // 3️⃣ 이미 버튼 있으면 재배치만 (중복 생성 방지)
   const existSave = doc.getElementById('btnFmtSave');
   const existLoad = doc.getElementById('btnFmtLoad');
   if (existSave && existLoad) {
-    // 설교 버튼이 이제 생겼다면, 설교 버튼 바로 뒤로 재배치
-    if (anchor && existSave.previousElementSibling !== anchor) {
-      anchor.insertAdjacentElement('afterend', existSave);
-      existSave.insertAdjacentElement('afterend', existLoad);
+    if (anchor && existLoad.nextElementSibling !== anchor) {
+      // 앵커 앞쪽에 재배치
+      anchor.insertAdjacentElement('beforebegin', existLoad);
+      anchor.insertAdjacentElement('beforebegin', existSave);
     }
     return;
   }
 
-  // 4) 새로 생성
+  // 4️⃣ 새 버튼 생성
   const btnSave = doc.createElement('button');
   btnSave.id = 'btnFmtSave';
   btnSave.type = 'button';
   btnSave.textContent = '서식저장';
-  btnSave.style.marginLeft = '8px';
+  btnSave.style.marginRight = '4px';
   btnSave.style.padding = '6px 10px';
   btnSave.style.border = '1px solid #555';
   btnSave.style.background = '#1e1f26';
@@ -122,7 +116,7 @@ function ensureFormatButtons(){
   btnLoad.id = 'btnFmtLoad';
   btnLoad.type = 'button';
   btnLoad.textContent = '서식회복';
-  btnLoad.style.marginLeft = '4px';
+  btnLoad.style.marginRight = '4px';
   btnLoad.style.padding = '6px 10px';
   btnLoad.style.border = '1px solid #555';
   btnLoad.style.background = '#1e1f26';
@@ -130,31 +124,16 @@ function ensureFormatButtons(){
   btnLoad.style.borderRadius = '4px';
   btnLoad.style.cursor = 'pointer';
 
-  // 5) 우선순위: 설교버튼 뒤 → header 끝 → host 끝 → (최후) 우하단 플로팅
+  // 5️⃣ 위치 삽입: "서식초기화" 버튼 바로 왼쪽
   if (anchor) {
-    anchor.insertAdjacentElement('afterend', btnSave);
-    btnSave.insertAdjacentElement('afterend', btnLoad);
-  } else if (headerEl) {
-    headerEl.appendChild(btnSave);
-    headerEl.appendChild(btnLoad);
+    anchor.insertAdjacentElement('beforebegin', btnLoad);
+    btnLoad.insertAdjacentElement('beforebegin', btnSave);
   } else if (host) {
     host.appendChild(btnSave);
     host.appendChild(btnLoad);
-  } else {
-    // 최후: 플로팅
-    const float = doc.createElement('div');
-    float.style.position = 'fixed';
-    float.style.right = '12px';
-    float.style.bottom = '12px';
-    float.style.display = 'flex';
-    float.style.gap = '8px';
-    float.style.zIndex = '99999';
-    float.appendChild(btnSave);
-    float.appendChild(btnLoad);
-    doc.body.appendChild(float);
   }
 
-  // 6) 클릭 이벤트 연결 (이미 구현된 저장/복원 함수 사용)
+  // 6️⃣ 이벤트 연결
   btnSave.addEventListener('click', saveFormatForOpenPara);
   btnLoad.addEventListener('click', restoreFormatForOpenPara);
 }
@@ -164,6 +143,7 @@ function safeBindFmtButtons(){
   catch(e){ console.error('ensureFormatButtons error:', e); }
 }
 // ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 END =====
+
 
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
 const el = id => document.getElementById(id);
