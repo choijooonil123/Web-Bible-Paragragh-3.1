@@ -244,9 +244,6 @@ function presetsForSingleVoice() {
   ];
 }
 
-// 음성 선택 저장 키
-const VOICE_CHOICE_KEY = 'wbps.tts.choice.v2';
-
 // 선택 저장/복원
 function resolveVoiceChoice() {
   try { return JSON.parse(localStorage.getItem(VOICE_CHOICE_KEY) || '{"type":"default"}'); }
