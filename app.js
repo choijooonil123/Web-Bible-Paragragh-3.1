@@ -1,5 +1,7 @@
 /* --------- Utils --------- */
 
+// === [FMTIO v2] Utils ===
+
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
 const el = id => document.getElementById(id);
 const treeEl = el('tree'), statusEl = el('status');
@@ -179,15 +181,145 @@ let EDITOR_READER = { playing:false, u:null, synth:window.speechSynthesis||null 
 
 (function bindButtons(){
   el('btnSaveJSON')?.addEventListener('click', downloadBibleJSON);
+
   const btnExport = el('btnExportAll');
   const btnImport = el('btnImportAll');
   const fileInput = el('importFile');
+
   if (btnExport) btnExport.onclick = exportAllData;
   if (btnImport) btnImport.onclick = ()=> fileInput && fileInput.click();
   if (fileInput) fileInput.addEventListener('change', (e)=>{
     const f = e.target.files?.[0]; if(!f) return;
     importAllData(f).finally(()=>{ e.target.value=''; });
   });
+
+  /* ---------------- FmtIO: 서식 내보내기/가져오기 바인딩 ---------------- */
+
+  // HTML에 다음 요소가 있어야 합니다:
+  // <button id="btnFmtExport">서식 내보내기</button>
+  // <button id="btnFmtImport">서식 가져오기</button>
+  // <input id="fmtImportFile" type="file" accept="application/json" hidden>
+
+  const fmtEx   = el('btnFmtExport');
+  const fmtIm   = el('btnFmtImport');
+  const fmtFile = el('fmtImportFile');
+
+  // 내보내기
+  if (fmtEx && !fmtEx._wbpBound) {
+    fmtEx._wbpBound = 1;
+  // ★ 서식 내보내기(v2 우선) — 기존 fmtEx.addEventListener(...) 전체 교체
+  fmtEx.addEventListener('click', ()=>{
+    try{
+      // v2 우선 시도 → v1(구형)까지 순차 폴백
+      const build =
+        window.FmtIO?.buildJSON_v2   ||
+        window.buildJSON_v2          ||
+        window.FmtIO?.buildJSON      ||
+        window.buildJSON;
+
+      if (typeof build !== 'function') {
+        alert('서식 내보내기 모듈이 초기화되지 않았습니다. (buildJSON_v2 없음)');
+        return;
+      }
+
+      const data = build();
+      // v2 스키마 권장: schema/version 존재 확인
+      const isV2 = data && (data.schema === 'wbps.format.v2' || data.version === 2);
+      if (!data || !Array.isArray(data.items) || data.items.length === 0) {
+        alert('내보낼 서식이 없습니다. (절 라인 .pline이 있는 메인 화면에서 실행)');
+        return;
+      }
+
+      const ts = new Date();
+      const y  = ts.getFullYear();
+      const m  = String(ts.getMonth()+1).padStart(2,'0');
+      const d  = String(ts.getDate()).padStart(2,'0');
+      const hh = String(ts.getHours()).padStart(2,'0');
+      const mm = String(ts.getMinutes()).padStart(2,'0');
+      const filename = `${isV2 ? 'wbps-format-v2' : 'wbps-format-runs'}-${y}${m}${d}-${hh}${mm}.json`;
+
+      if (typeof window.FmtIO?.download === 'function') {
+        window.FmtIO.download(data, filename);
+      } else {
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href = url; a.download = filename; a.style.display='none';
+        document.body.appendChild(a); a.click();
+        setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+      }
+
+      typeof status === 'function' && status(`서식을 JSON으로 내보냈습니다. (${isV2 ? 'v2' : 'v1'})`);
+    }catch(err){
+      console.error('[FmtIO] export failed', err);
+      alert('서식 내보내기에 실패했습니다. 콘솔을 확인하세요.');
+    }
+  });
+
+  // 가져오기(파일 선택 트리거)
+  if (fmtIm && !fmtIm._wbpBound) {
+    fmtIm._wbpBound = 1;
+    fmtIm.addEventListener('click', ()=>{
+      if (!fmtFile) {
+        alert('fmtImportFile 입력 요소가 없습니다.');
+        return;
+      }
+      fmtFile.click();
+    });
+  }
+
+  // 가져오기(파일 적용)
+  if (fmtFile && !fmtFile._wbpBound) {
+    fmtFile._wbpBound = 1;
+    // ★ 서식 가져오기(v2 우선) — 기존 fmtFile.addEventListener(...) 통째로 교체
+    fmtFile?.addEventListener('change', async (ev)=>{
+      const f = ev.target.files?.[0];
+      if (!f) return;
+
+      try{
+        const json = JSON.parse(await f.text());
+
+        // v2 스키마 감지
+        const isV2 = (json?.schema === 'wbps.format.v2') || (json?.version === 2);
+
+        // 적용기 우선순위: v2 → v1 폴백
+        const apply =
+          window.applyJSON_fmt          || // 권장: v2 적용기(전역)
+          window.FmtIO?.applyJSON_v2    || // 모듈 내부 v2 이름일 때
+          window.FmtIO?.applyJSON       || // 구형(fallback)
+          window.applyJSON;               // 구형(fallback)
+
+        if (typeof apply !== 'function') {
+          alert('서식 적용기(applyJSON_fmt/applyJSON_v2)가 없습니다.');
+          return;
+        }
+
+        // 메인 화면 보호: 절 라인(.pline) 있어야 적용
+        if (!document.querySelector('.pline')) {
+          alert('이 창에서는 서식 가져오기를 적용할 수 없습니다.\n메인 성경 화면(절 라인)에서 실행하세요.');
+          return;
+        }
+
+        // 구형 경고(선택)
+        if (!isV2) {
+          const ok = confirm('구형(v1) 서식처럼 보입니다. 적용을 시도할까요?');
+          if (!ok) { ev.target.value = ''; return; }
+        }
+
+        // 적용
+        apply(json);
+        typeof status === 'function' && status(`서식 JSON 적용 완료 (${isV2 ? 'v2' : 'v1'})`);
+
+      } catch (e) {
+        console.error('[FmtIO] import failed', e);
+        alert('서식 가져오기에 실패했습니다. JSON 형식을 확인해 주세요.');
+      } finally {
+        ev.target.value = ''; // 같은 파일 재선택 가능하도록 초기화
+      }
+    });
+
+  }
+  /* ---------------- FmtIO 바인딩 끝 ---------------- */
 })();
 
 async function tryFetchJSON(path){ const res = await fetch(path, {cache:'no-store'}); if(!res.ok) throw 0; return await res.json(); }
@@ -2104,192 +2236,184 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
 })();
 
 /* ===== FmtIO (메인 전역) — 서식 내보내기/가져오기 ===== */
-(function(){
-    const VERSE_SELECTOR = '.pline';
-    const PARA_ATTR = 'data-para-id';
-  
-    const $  = (sel, root=document) => root.querySelector(sel);
-    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
-  
-    function ensureButtons(){
-      const host = ($('.actions', $('header')) || $('header') || document.body);
-      let ex = $('#btnFmtExport');
-      let im = $('#btnFmtImport');
-      let fi = $('#fmtImportFile');
-  
-      if(!ex){ ex = document.createElement('button'); ex.id='btnFmtExport'; ex.type='button'; ex.textContent='서식 내보내기'; host.appendChild(ex); }
-      if(!im){ im = document.createElement('button'); im.id='btnFmtImport'; im.type='button'; im.textContent='서식 가져오기'; host.appendChild(im); }
-      if(!fi){ fi = document.createElement('input'); fi.id='fmtImportFile'; fi.type='file'; fi.accept='application/json'; fi.hidden=true; host.appendChild(fi); }
-      return { ex, im, fi };
-    }
-  
-    function getVerseNodes(){
-      const set = new Set();
-      $$(VERSE_SELECTOR).forEach(n => set.add(n));
-      return Array.from(set);
-    }
-    function nodeId(node){
-      const byAttr = node.getAttribute('data-vid');
-      if(byAttr) return byAttr;
-      if(node.id) return node.id;
-      const para = node.closest(`[${PARA_ATTR}]`);
-      const paraId = para ? para.getAttribute(PARA_ATTR) : 'para';
-      const idx = node.parentNode ? Array.prototype.indexOf.call(node.parentNode.children, node) : -1;
-      return `${paraId}::${idx}`;
-    }
-  
-    function escapeHTML(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-    function extractRunsFrom(node){
-      const runs = [];
-      (function walk(n, m){
-        if(n.nodeType===Node.TEXT_NODE){
-          const t = n.nodeValue || '';
-          if(t) runs.push({ t, b:!!m.b, i:!!m.i, u:!!m.u, color: m.color||null });
-          return;
-        }
-        if(n.nodeType===Node.ELEMENT_NODE){
-          const mark = { ...m };
-          const tag = n.tagName.toLowerCase();
-          if(tag==='b'||tag==='strong') mark.b = true;
-          if(tag==='i'||tag==='em')     mark.i = true;
-          if(tag==='u')                 mark.u = true;
-          if(n.style && n.style.color)  mark.color = n.style.color;
-          n.childNodes.forEach(ch=>walk(ch, mark));
-        }
-      })(node, {});
-      return { id: nodeId(node), runs };
-    }
-    function runsToHTML(runs){
-      return (runs||[]).map(r=>{
-        let t = escapeHTML(r.t);
-        if(r.color) t = `<span style="color:${r.color}">${t}</span>`;
-        if(r.b) t = `<b>${t}</b>`;
-        if(r.i) t = `<i>${t}</i>`;
-        if(r.u) t = `<u>${t}</u>`;
-        return t;
-      }).join('');
-    }
-  
-    function buildJSON(){
-      return {
-        type: 'format-runs',
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        items: getVerseNodes().map(n => extractRunsFrom(n)),
-      };
-    }
-    function applyJSON(data){
-      if(!data || data.type!=='format-runs' || !Array.isArray(data.items)) throw new Error('Invalid format JSON');
-      const index = new Map();
-      getVerseNodes().forEach(n => index.set(nodeId(n), n));
-      for(const item of data.items){
-        const n = index.get(item.id);
-        if(n) n.innerHTML = runsToHTML(item.runs);
-      }
-    }
-    function download(obj, filename){
-      const blob = new Blob([JSON.stringify(obj,null,2)], {type:'application/json'});
-      const url  = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename || `formatting-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
-      a.style.display='none';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
-    }
-  
-    // 전역 노출
-    window.FmtIO = { buildJSON, applyJSON, download, ensure: ensureButtons };
-  
-    // ---- 👇 여기부터 교체/추가 ----
-  
-    // (A) 안전 바인딩 + 위임: 버튼이 어디에 있어도 동작
-    function safeBindFmtButtons(){
-      // 버튼이 없다면 만들어 둔다
-      const { ex, im, fi } = ensureButtons();
-  
-      // 위임 방식: 문서 어디에서든 id 매칭 시 동작 (중복 방지 플래그)
-      if (!document._wbpFmtDelegated) {
-        document._wbpFmtDelegated = true;
-  
-        document.addEventListener('click', async (e)=>{
-          const exBtn = e.target.closest('#btnFmtExport');
-          const imBtn = e.target.closest('#btnFmtImport');
-  
-          if (exBtn) {
-            e.preventDefault();
-            try {
-              const data = buildJSON();
-  
-              // 팝업/에디터 같은 .pline 없는 화면 보호
-              if (!Array.isArray(data.items) || data.items.length === 0) {
-                alert('내보낼 서식이 없습니다.\n메인 성경 화면(절 라인이 보이는 화면)에서 실행하세요.');
-                return;
-              }
-  
-              const ts = new Date();
-              const y = ts.getFullYear();
-              const m = String(ts.getMonth()+1).padStart(2,'0');
-              const d = String(ts.getDate()).padStart(2,'0');
-              const hh= String(ts.getHours()).padStart(2,'0');
-              const mm= String(ts.getMinutes()).padStart(2,'0');
-              const file = `wbps-format-runs-${y}${m}${d}-${hh}${mm}.json`;
-  
-              window.FmtIO.download(data, file);
-  
-              if (typeof status === 'function') status('서식을 JSON으로 내보냈습니다.');
-            } catch(err){
-              console.error('[FmtIO] export failed', err);
-              alert('서식 내보내기에 실패했습니다. 콘솔을 확인하세요.');
-            }
-            return;
-          }
-  
-          if (imBtn) {
-            e.preventDefault();
-            const { fi } = ensureButtons();
-            fi && fi.click();
-            return;
-          }
-        });
-  
-        if (fi && !fi._wbpBound){
-          fi._wbpBound = 1;
-          fi.addEventListener('change', async (ev)=>{
-            const f = ev.target.files && ev.target.files[0];
-            if(!f) return;
-            try{
-              const text = await f.text();
-              const json = JSON.parse(text);
-  
-              if (!document.querySelector('.pline')) {
-                alert('이 창에서는 서식 가져오기를 적용할 수 없습니다.\n메인 성경 화면에서 실행하세요.');
-                return;
-              }
-  
-              applyJSON(json);
-              if (typeof status === 'function') status('서식을 JSON에서 가져와 적용했습니다.');
-            }catch(e){
-              console.error('[FmtIO] import failed', e);
-              alert('서식 가져오기에 실패했습니다. JSON 파일 형식을 확인해 주세요.');
-            } finally {
-              ev.target.value = '';
-            }
-          });
-        }
-      }
-    }
-  
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', safeBindFmtButtons);
-    } else {
-        safeBindFmtButtons();
-    }
-    document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
+// ===== [FMTIO v2] BEGIN =============================================
+function getPlainFromPline(node) {
+  const clone = node.cloneNode(true);
+  clone.querySelectorAll('sup,pv,.pv,sup.pv').forEach(el => el.remove());
+  return clone.textContent || '';
+}
 
+function collectSpansByWalk(node, baseOffset, spans, active) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.nodeValue || '';
+    const len = cp.split(text).length;
+    if (len === 0) return 0;
+    for (const a of active) {
+      spans.push({ start: baseOffset, end: baseOffset + len, attrs: { ...a.attrs } });
+    }
+    return len;
+  }
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    const attrs = {};
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'b' || tag === 'strong') attrs.b = true;
+    if (tag === 'i' || tag === 'em')     attrs.i = true;
+    if (tag === 'u')                     attrs.u = true;
+    if (tag === 's' || tag === 'strike') attrs.strike = true;
 
-})();  
+    if (node.style) {
+      if (node.style.color) attrs.color = node.style.color;
+      if (node.style.backgroundColor) attrs.highlight = node.style.backgroundColor;
+      if (node.style.fontWeight && !attrs.b) attrs.weight = node.style.fontWeight;
+      if (node.style.fontFamily) attrs.font = node.style.fontFamily;
+      if (node.style.fontSize)   attrs.size = node.style.fontSize;
+      const dl = node.style.textDecorationLine || '';
+      if (dl.includes('underline')) attrs.u = true;
+      if (dl.includes('line-through')) attrs.strike = true;
+    }
+    if (node.classList?.length) attrs.class = [...node.classList].join(' ');
+
+    if (tag === 'sup' && node.classList.contains('pv')) return 0;
+
+    const nextActive = (Object.keys(attrs).length > 0) ? active.concat({ attrs }) : active;
+
+    let consumed = 0;
+    node.childNodes.forEach(ch => { consumed += collectSpansByWalk(ch, baseOffset + consumed, spans, nextActive); });
+    return consumed;
+  }
+  return 0;
+}
+
+function mergeOverlaps(spans) {
+  spans.sort((a,b)=> (a.start - b.start) || (a.end - b.end));
+  const out = [];
+  for (const s of spans) {
+    const last = out[out.length-1];
+    if (last && last.end === s.start && JSON.stringify(last.attrs) === JSON.stringify(s.attrs)) {
+      last.end = s.end;
+    } else out.push({ ...s });
+  }
+  return out;
+}
+
+function extractItemV2(plineNode, id) {
+  const baseText = getPlainFromPline(plineNode);
+  const spansRaw = [];
+  collectSpansByWalk(plineNode, 0, spansRaw, []);
+  const spans = mergeOverlaps(spansRaw);
+  return { id, baseText, spans, meta: {} };
+}
+
+function attrsToOpenClose(attrs) {
+  const styles = [], classes = [];
+  if (attrs.color)     styles.push(`color:${attrs.color}`);
+  if (attrs.highlight) styles.push(`background-color:${attrs.highlight}`);
+  if (attrs.size)      styles.push(`font-size:${attrs.size}`);
+  if (attrs.font)      styles.push(`font-family:${attrs.font}`);
+  if (attrs.weight && /^\d+$/.test(String(attrs.weight))) styles.push(`font-weight:${attrs.weight}`);
+  if (attrs.class)     classes.push(attrs.class);
+
+  let open = '', close = '';
+  if (attrs.u)      { open += '<u>';  close = '</u>' + close; }
+  if (attrs.i)      { open += '<i>';  close = '</i>' + close; }
+  if (attrs.b)      { open += '<b>';  close = '</b>' + close; }
+  if (attrs.strike) { open += '<s>';  close = '</s>' + close; }
+
+  if (styles.length || classes.length) {
+    open += `<span${classes.length ? ` class="${classes.join(' ')}"` : ''}${styles.length ? ` style="${styles.join(';')}"` : ''}>`;
+    close = '</span>' + close;
+  }
+  return { open, close };
+}
+
+function rebuildHTMLFromSpans(baseText, spans) {
+  const N = cp.split(baseText).length;
+  const edges = new Set([0, N]);
+  spans.forEach(s => { edges.add(s.start); edges.add(s.end); });
+  const cuts = [...edges].sort((a,b)=>a-b);
+
+  let html = '';
+  for (let i=0; i<cuts.length-1; i++) {
+    const a = cuts[i], b = cuts[i+1];
+    if (a === b) continue;
+    const segText = cp.slice(baseText, a, b);
+    const active = spans.filter(s => s.start < b && s.end > a);
+    const attrs = {};
+    for (const s of active) for (const [k,v] of Object.entries(s.attrs||{})) attrs[k] = v;
+    const { open, close } = attrsToOpenClose(attrs);
+    html += open + (typeof escapeHtml === 'function' ? escapeHtml(segText) : segText) + close;
+  }
+  return html;
+}
+
+function applyItemV2ToPline(plineNode, item) {
+  const currentBase = getPlainFromPline(plineNode);
+  if (currentBase !== item.baseText) {
+    console.warn('[FmtIO v2] baseText mismatch; skip', item.id);
+    return;
+  }
+  const supClone = plineNode.querySelector('sup.pv')?.cloneNode(true) || null;
+  plineNode.innerHTML = rebuildHTMLFromSpans(item.baseText, item.spans);
+  if (supClone) plineNode.prepend(supClone);
+}
+
+function nodeStableId(plineNode, fallbackIndex){
+  const attr = plineNode.getAttribute('data-vid');
+  if (attr) return attr;
+  const para = plineNode.closest('[data-para-id]');
+  const paraId = para ? para.getAttribute('data-para-id') : 'para';
+  const pos = plineNode.parentNode ? Array.prototype.indexOf.call(plineNode.parentNode.children, plineNode) : fallbackIndex;
+  return `${paraId}::${pos}`;
+}
+
+function buildJSON_v2(){
+  const lines = Array.from(document.querySelectorAll('.pline'));
+  return {
+    type: 'format-runs',
+    version: 2,
+    indexing: 'codepoint',
+    exportedAt: new Date().toISOString(),
+    items: lines.map((n, idx) => extractItemV2(n, nodeStableId(n, idx)))
+  };
+}
+
+function migrate_v1_to_v2(itemV1){
+  const baseText = (itemV1.runs||[]).map(r=> String(r.t||'')).join('');
+  let offset = 0;
+  const spans = [];
+  for (const r of (itemV1.runs||[])) {
+    const text = String(r.t || '');
+    const len  = cp.split(text).length;
+    if (len === 0) { continue; }
+    const attrs = {};
+    if (r.b) attrs.b = true;
+    if (r.i) attrs.i = true;
+    if (r.u) attrs.u = true;
+    if (r.color) attrs.color = r.color;
+    if (Object.keys(attrs).length) spans.push({ start: offset, end: offset + len, attrs });
+    offset += len;
+  }
+  return { id: itemV1.id, baseText, spans: mergeOverlaps(spans), meta: itemV1.meta || {} };
+}
+
+function applyJSON_fmt(json){
+  if (!json || json.type !== 'format-runs') throw new Error('Invalid format JSON');
+  const plineMap = new Map();
+  document.querySelectorAll('.pline').forEach(n => {
+    const id = nodeStableId(n, 0);
+    plineMap.set(id, n);
+  });
+
+  const items = [];
+  if (json.version === 2) items.push(...json.items);
+  else (json.items || []).forEach(it => items.push(migrate_v1_to_v2(it)));
+
+  for (const it of items) {
+    const node = plineMap.get(it.id);
+    if (node) applyItemV2ToPline(node, it);
+  }
+}
+// ===== [FMTIO v2] END ===============================================
 
 // === 강제 보정: 헤더/버튼이 늦게 생겨도 반드시 바인딩 ===
 (function ensureFmtButtonsAlways() {
