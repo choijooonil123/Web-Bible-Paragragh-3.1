@@ -1,4 +1,122 @@
 /* --------- Utils --------- */
+
+// ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage) BEGIN =====
+const FMT_NS = 'WBP3_FMT';
+
+function getOpenParaKeyAndEls(){
+  // 현재 열려있는 단락(details.para[open])과 키 구성
+  const openPara = document.querySelector('details.para[open]');
+  if(!openPara) return null;
+
+  // summary .ptitle 안에 data-book, data-ch, data-idx가 이미 존재(프로젝트 기존 코드에 근거)
+  const t = openPara.querySelector('summary .ptitle');
+  if(!t) return null;
+  const book = t.dataset.book;
+  const ch   = t.dataset.ch;
+  const idx  = t.dataset.idx;
+  if(!book || !ch || !idx) return null;
+
+  // 라인(절문장) 엘리먼트 수집: .pline 내부의 실제 텍스트 컨테이너를 우선적으로 잡습니다.
+  // (프로젝트 구조에 따라 .content가 없을 수도 있으므로 fallback 포함)
+  const candidates = openPara.querySelectorAll('.pline .content, .pline');
+  const lineEls = Array.from(candidates).filter(el => !el.matches('details, summary'));
+
+  const key = `${FMT_NS}:${book}:${ch}:${idx}`;
+  return { key, openPara, lineEls };
+}
+
+function saveFormatForOpenPara(){
+  const ctx = getOpenParaKeyAndEls();
+  if(!ctx){ alert('열려있는 단락을 찾을 수 없습니다.'); return; }
+
+  // 절문장 인덱스별 HTML 스냅샷(서식 포함) 저장
+  const payload = {
+    v: 1,
+    savedAt: Date.now(),
+    lines: ctx.lineEls.map(el => el.innerHTML)
+  };
+
+  try{
+    localStorage.setItem(ctx.key, JSON.stringify(payload));
+    status && status('서식 저장 완료'); // 기존 status() 유틸 재사용
+  }catch(e){
+    console.error(e);
+    alert('서식 저장 중 오류가 발생했습니다.');
+  }
+}
+
+function restoreFormatForOpenPara(){
+  const ctx = getOpenParaKeyAndEls();
+  if(!ctx){ alert('열려있는 단락을 찾을 수 없습니다.'); return; }
+
+  const raw = localStorage.getItem(ctx.key);
+  if(!raw){ alert('저장된 서식이 없습니다. 먼저 [서식저장]을 실행하세요.'); return; }
+
+  let data;
+  try{ data = JSON.parse(raw); }catch(e){
+    console.error(e);
+    alert('저장된 서식 데이터를 읽는 중 오류가 발생했습니다.');
+    return;
+  }
+  if(!data || !Array.isArray(data.lines)){
+    alert('저장된 서식 형식이 올바르지 않습니다.');
+    return;
+  }
+
+  // 저장 당시 라인 수와 현재 라인 수가 다를 수 있음 → 가능한 범위만 복원
+  const n = Math.min(ctx.lineEls.length, data.lines.length);
+  for(let i=0;i<n;i++){
+    ctx.lineEls[i].innerHTML = data.lines[i];
+  }
+  status && status('서식 복원 완료');
+}
+// ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage) END =====
+
+// ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 BEGIN =====
+function ensureFormatButtons(){
+  // 버튼을 끼울 자리를 우선 탐색: statusEl 근처가 있으면 그 옆에, 없으면 body에 플로팅
+  let host = (typeof statusEl !== 'undefined' && statusEl && statusEl.parentElement) ? statusEl.parentElement : null;
+  if(!host){
+    // 플로팅 컨테이너 생성(다른 UI에 영향 없도록 z-index와 클래스 별도)
+    const float = document.createElement('div');
+    float.style.position = 'fixed';
+    float.style.right = '12px';
+    float.style.bottom = '12px';
+    float.style.display = 'flex';
+    float.style.gap = '8px';
+    float.style.zIndex = '99999';
+    document.body.appendChild(float);
+    host = float;
+  }
+
+  // 중복 생성 방지
+  if(host.querySelector('#btnFmtSave')) return;
+
+  const btnSave = document.createElement('button');
+  btnSave.id = 'btnFmtSave';
+  btnSave.type = 'button';
+  btnSave.textContent = '서식저장';
+  btnSave.style.padding = '6px 10px';
+
+  const btnLoad = document.createElement('button');
+  btnLoad.id = 'btnFmtLoad';
+  btnLoad.type = 'button';
+  btnLoad.textContent = '서식회복';
+  btnLoad.style.padding = '6px 10px';
+
+  host.appendChild(btnSave);
+  host.appendChild(btnLoad);
+
+  btnSave.addEventListener('click', saveFormatForOpenPara);
+  btnLoad.addEventListener('click', restoreFormatForOpenPara);
+}
+
+function safeBindFmtButtons(){
+  try{ ensureFormatButtons(); }
+  catch(e){ console.error('ensureFormatButtons error:', e); }
+}
+// ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 END =====
+
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
 const el = id => document.getElementById(id);
 const treeEl = el('tree'), statusEl = el('status');
@@ -1918,4 +2036,14 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
       setTimeout(showBar,0);
     }
   });
+
+  // ===== [FORMAT-PERSIST INIT HOOK] BEGIN =====
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', safeBindFmtButtons);
+  } else {
+    safeBindFmtButtons();
+  }
+  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
+  // ===== [FORMAT-PERSIST INIT HOOK] END =====
+
 })();
