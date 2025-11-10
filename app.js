@@ -2164,3 +2164,4 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
 
 })();  
+})();  
