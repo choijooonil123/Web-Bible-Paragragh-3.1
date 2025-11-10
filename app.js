@@ -320,6 +320,7 @@ let EDITOR_READER = { playing:false, u:null, synth:window.speechSynthesis||null 
 
   }
   /* ---------------- FmtIO 바인딩 끝 ---------------- */
+  }
 })();
 
 async function tryFetchJSON(path){ const res = await fetch(path, {cache:'no-store'}); if(!res.ok) throw 0; return await res.json(); }
