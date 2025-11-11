@@ -530,6 +530,21 @@ function ensureUnitChips(){
     `;
     t.appendChild(wrap);
 
+    // 4) 클릭이 summary 토글로 전파되지 않도록 차단 + 에디터 열기
+    if (!wrap.dataset.bound) {
+      wrap.addEventListener('click', (e)=>{
+        e.stopPropagation(); // summary의 열기/닫기 방지
+        const btn = e.target.closest('.unit-chip');
+        if (!btn) return;
+        // 단락이 닫혀 있으면 열기
+        if (!para.hasAttribute('open')) para.setAttribute('open','');
+        // 에디터 실행
+        openUnitEditor(btn.dataset.type);
+        e.preventDefault(); // 모바일 더블탭 등 방지
+      });
+      wrap.dataset.bound = '1';
+    }
+
     // 4) 클릭 처리 (오픈 단락 기준으로 에디터 열기)
     wrap.addEventListener('click', (e)=>{
       const btn = e.target.closest('.unit-chip');
