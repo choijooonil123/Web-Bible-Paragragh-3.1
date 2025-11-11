@@ -1,5 +1,121 @@
 /* --------- Utils --------- */
 
+// ===== [BOOK-UNIT EDITOR] 성경(책) 단위 에디터 & 칩스 =====
+const BOOK_UNIT_NS = 'WBP3_BOOKUNIT';
+
+// 책 키 생성: data-book 우선, 없으면 제목 텍스트 사용
+function _bookKeyFromSummary(sumEl, type){
+  if (!sumEl) return null;
+  const btitle = sumEl.querySelector('.btitle');
+  const dataBook = btitle?.dataset?.book || sumEl.dataset?.book;
+  let bookId = dataBook || (btitle?.textContent || sumEl.textContent || '').trim();
+  if (!bookId) return null;
+  // 공백 정리
+  bookId = bookId.replace(/\s+/g,' ');
+  return `${BOOK_UNIT_NS}:${bookId}:${type}`;
+}
+
+// 기존 단위 에디터 팝업을 재사용 (없으면 생성)
+function _ensureUnitEditorHost(){
+  let host = document.getElementById('unitEditor');
+  if (host) return host;
+  host = document.createElement('div');
+  host.id = 'unitEditor';
+  host.className = 'unit-editor';
+  host.innerHTML = `
+    <header>
+      <div class="ue-title">단위 에디터</div>
+      <div class="ue-actions">
+        <button type="button" id="ueSave">저장</button>
+        <button type="button" id="ueClose">닫기</button>
+      </div>
+    </header>
+    <textarea id="ueText" placeholder="여기에 내용을 입력하세요. (자동저장)"></textarea>
+  `;
+  document.body.appendChild(host);
+  // 닫기
+  host.querySelector('#ueClose').addEventListener('click', ()=> { host.style.display = 'none'; });
+  // 수동 저장
+  host.querySelector('#ueSave').addEventListener('click', ()=>{
+    const key = host.dataset.key;
+    if (key) localStorage.setItem(key, host.querySelector('#ueText').value || '');
+  });
+  // 자동 저장(디바운스)
+  let _tm = null;
+  host.querySelector('#ueText').addEventListener('input', ()=>{
+    clearTimeout(_tm);
+    _tm = setTimeout(()=>{
+      const key = host.dataset.key;
+      if (key) try { localStorage.setItem(key, host.querySelector('#ueText').value || ''); } catch(_){}
+    }, 400);
+  });
+  return host;
+}
+
+// 책 단위 에디터 열기
+function openBookEditor(type, sumEl){
+  const sum = sumEl || document.querySelector('details.book[open] > summary');
+  if (!sum) { alert('열린 성경(책)을 찾을 수 없습니다. 책 summary를 먼저 여세요.'); return; }
+
+  const key = _bookKeyFromSummary(sum, type);
+  if (!key) { alert('책 키 생성 실패: .btitle data-book 또는 텍스트 확인'); return; }
+
+  const host = _ensureUnitEditorHost();
+  const label = (type === 'basic') ? '기본이해' : (type === 'structure' ? '내용구조' : '메세지요약');
+  host.dataset.key = key;
+  host.querySelector('.ue-title').textContent = `단위 에디터 — ${label} (책 단위)`;
+  host.querySelector('#ueText').value = localStorage.getItem(key) || '';
+  host.style.display = 'flex';
+  host.querySelector('#ueText').focus();
+}
+
+// 책 summary 옆 칩스 주입
+function ensureBookChips(){
+  const books = document.querySelectorAll('details.book > summary');
+  if (!books.length) return;
+
+  books.forEach(sum => {
+    // btitle 없으면 생성(한 번만)
+    let bt = sum.querySelector('.btitle');
+    if (!bt) {
+      bt = document.createElement('span');
+      bt.className = 'btitle';
+      const first = sum.firstChild;
+      if (first && first.nodeType === Node.TEXT_NODE) {
+        bt.textContent = first.nodeValue.trim();
+        first.nodeValue = '';
+        sum.insertBefore(bt, sum.firstChild);
+      } else {
+        // 텍스트가 없으면 빈 btitle 삽입
+        sum.insertBefore(bt, sum.firstChild);
+      }
+    }
+
+    // 이미 summary 바로 아래에 칩스가 있는지 확인
+    let chips = sum.querySelector(':scope > .book-chips');
+    if (!chips) {
+      chips = document.createElement('span');
+      chips.className = 'book-chips';
+      chips.innerHTML = `
+        <button type="button" class="book-chip" data-type="basic">기본이해</button>
+        <button type="button" class="book-chip" data-type="structure">내용구조</button>
+        <button type="button" class="book-chip" data-type="summary">메세지요약</button>
+      `;
+      sum.appendChild(chips);
+
+      // summary 토글로 전파 차단 + 해당 책 컨텍스트로 에디터 열기
+      chips.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const btn = e.target.closest('.book-chip'); if (!btn) return;
+        const paraBook = sum.closest('details.book');
+        if (paraBook && !paraBook.hasAttribute('open')) paraBook.setAttribute('open',''); // 책 열기 보장
+        openBookEditor(btn.dataset.type, sum);
+        e.preventDefault();
+      });
+    }
+  });
+}
+
 // ===== [UNIT-EDITOR GLOBAL CHIPS] 헤더 우측 전역 칩스 생성 (전역 등록) BEGIN =====
 function ensureUnitGlobalChips(){
   const doc = document;
@@ -2422,21 +2538,21 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   const color = document.getElementById('vcolor');
   const docEl = document.getElementById('doc');
 
-  // ===== [FORMAT-PERSIST INIT HOOK] BEGIN =====
+  // ===== [INIT HOOK] BEGIN =====
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       safeBindFmtButtons();
-      ensureUnitGlobalChips();     // ← 추가
+      ensureBookChips();          // 👈 추가: 책 단위 칩스
     });
   } else {
     safeBindFmtButtons();
-    ensureUnitGlobalChips();       // ← 추가
+    ensureBookChips();            // 👈 추가
   }
   document.addEventListener('wbp:treeBuilt', ()=> setTimeout(()=>{
     safeBindFmtButtons();
-    ensureUnitGlobalChips();       // ← 추가
+    ensureBookChips();            // 👈 추가 (트리 재구성 시에도 보장)
   }, 0));
-  // ===== [FORMAT-PERSIST INIT HOOK] END =====
+  // ===== [INIT HOOK] END =====
 
   if(!bar || !docEl) return;
 
