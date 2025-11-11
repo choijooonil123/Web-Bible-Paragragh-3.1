@@ -16,7 +16,7 @@ function _bookKeyFromSummary(sumEl, type){
 }
 
 // 기존 단위 에디터 팝업을 재사용 (없으면 생성)
-function _ensureUnitEditorHost(){
+function _ensureBookUnitEditorHost(){
   let host = document.getElementById('unitEditor');
   if (host) return host;
   host = document.createElement('div');
@@ -60,7 +60,7 @@ function openBookEditor(type, sumEl){
   const key = _bookKeyFromSummary(sum, type);
   if (!key) { alert('책 키 생성 실패: .btitle data-book 또는 텍스트 확인'); return; }
 
-  const host = _ensureUnitEditorHost();
+  const host = _ensureBookUnitEditorHost();
   const label = (type === 'basic') ? '기본이해' : (type === 'structure' ? '내용구조' : '메세지요약');
   host.dataset.key = key;
   host.querySelector('.ue-title').textContent = `단위 에디터 — ${label} (책 단위)`;
@@ -115,6 +115,9 @@ function ensureBookChips(){
     }
   });
 }
+
+// 전역에서 콘솔로도 호출 가능하게 등록
+window.ensureBookChips = ensureBookChips;
 
 // ===== [UNIT-EDITOR GLOBAL CHIPS] 헤더 우측 전역 칩스 생성 (전역 등록) BEGIN =====
 function ensureUnitGlobalChips(){
@@ -348,18 +351,19 @@ function _collectTextAndRuns(rootEl){
 }
 
 function _wrapRunsToHTML(text, spans){
-  // 안전한 HTML 생성: 단순 병합 방식 (중첩을 단순화하여 출력)
-  const cps = [...text]; // 문자 배열 (유니코드 안전)
-  // 준비: 위치별 시작/끝 맵
+  // 유니코드 안전 문자 배열
+  const cps = [...String(text||'')];
+
+  // 위치별 시작/끝 인덱스 맵
   const starts = new Map(), ends = new Map();
-  spans.forEach(sp => {
+  (spans||[]).forEach(sp => {
     if (!starts.has(sp.start)) starts.set(sp.start, []);
     starts.get(sp.start).push(sp);
     if (!ends.has(sp.end)) ends.set(sp.end, []);
     ends.get(sp.end).push(sp);
   });
 
-  // 도움함수: attrs -> 오픈/클로즈 태그
+  // 태그 열기/닫기
   function openTags(a){
     let out = '';
     if (a.b) out += '<b>';
@@ -372,34 +376,32 @@ function _wrapRunsToHTML(text, spans){
   }
   function closeTags(a){
     let out = '';
-    if (a.color) out += '</span>';
-    if (a.mark) out += '</mark>';
-    if (a.s) out += '</s>';
-    if (a.u) out += '</u>';
-    if (a.i) out += '</i>';
-    if (a.b) out += '</b>';
+    if (a.color) out = '</span>' + out;
+    if (a.mark)  out = '</mark>' + out;
+    if (a.s)     out = '</s>' + out;
+    if (a.u)     out = '</u>' + out;
+    if (a.i)     out = '</i>' + out;
+    if (a.b)     out = '</b>' + out;
     return out;
   }
 
-  // 현재 활성 attrs 스택(간단 합산 전략)
+  // 현재 활성 속성 스택(단순 병합 전략)
   const active = [];
   const out = [];
+
   for (let i=0;i<=cps.length;i++){
-    // 닫기
+    // 먼저 닫기
     if (ends.has(i)){
-      // 단순 처리: 모든 닫기 -> 닫고 스택 비움
       if (active.length){
-        // 합쳐진 attrs로 닫기
         const merged = active.reduce((m,a)=>Object.assign(m,a),{});
         out.push(closeTags(merged));
         active.length = 0;
       }
     }
-    // 열기
+    // 그 다음 열기
     if (starts.has(i)){
-      const list = starts.get(i);
-      if (list && list.length){
-        // 시작들의 attrs 병합하여 오픈, 그리고 스택에 푸시
+      const list = starts.get(i) || [];
+      if (list.length){
         const merged = {};
         for (const sp of list){
           const a = sp.attrs || {};
@@ -414,6 +416,7 @@ function _wrapRunsToHTML(text, spans){
         out.push(openTags(merged));
       }
     }
+    // 본문 문자 추가
     if (i < cps.length){
       const ch = cps[i]
         .replace(/&/g,'&amp;')
@@ -422,12 +425,14 @@ function _wrapRunsToHTML(text, spans){
       out.push(ch);
     }
   }
+
   if (active.length){
     const merged = active.reduce((m,a)=>Object.assign(m,a),{});
     out.push(closeTags(merged));
   }
   return out.join('');
 }
+
 // ===== [FORMAT-PERSIST/RUNS] END =====
 
 // ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage, v2 runs) BEGIN =====
@@ -543,31 +548,19 @@ function restoreFormatForOpenPara(){
   if(!data || !Array.isArray(data.lines)){ alert('저장된 서식 형식이 올바르지 않습니다.'); return; }
 
   const n = Math.min(ctx.lineEls.length, data.lines.length);
-  for (let i=0;i<n;i++){
-    const lineEl = ctx.lineEls[i];
-    const rec = data.lines[i];
-    if(!rec) continue;
-
-    // 우선 시도: runs 텍스트+spans 기반 정밀 복원 (v2)
+  for (let i=0; i<n; i++){
+    const el = ctx.lineEls[i];
+    const root = el.matches('.content') ? el : (el.querySelector('.content') || el);
+    const rec = data.lines[i] || {};
     if (rec.text && Array.isArray(rec.spans)){
-      try{
-        const rebuilt = _wrapRunsToHTML(rec.text, rec.spans);
-        const root = lineEl.matches('.content') ? lineEl : (lineEl.querySelector('.content') || lineEl);
-        root.innerHTML = rebuilt;
-        continue;
-      }catch(e){
-        console.error('runs 복원 실패, HTML 복원으로 대체:', e);
-      }
-    }
-
-    // fallback: 기존 html 스냅샷 복원
-    const html = (typeof rec === 'string') ? rec : (rec.html || '');
-    if(html){
-      const root = lineEl.matches('.content') ? lineEl : (lineEl.querySelector('.content') || lineEl);
-      root.innerHTML = html;
+      // runs 기반 복원
+      root.innerHTML = _wrapRunsToHTML(rec.text, rec.spans);
+    } else if (rec.html){
+      // 구형 저장본 호환
+      root.innerHTML = rec.html;
     }
   }
-  status && status('서식 복원 완료');
+  status && status('서식 회복 완료 (runs 기반)');
 }
 
 // ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage, v2 runs) END =====
@@ -720,7 +713,12 @@ const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
 const el = id => document.getElementById(id);
 const treeEl = el('tree'), statusEl = el('status');
 function status(msg){ statusEl.textContent = msg; }
-function escapeHtml(s){ return (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+function escapeHtml(s){
+  return String(s||'')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;');
+}
 function stripBlankLines(s){return String(s||'').split(/\r?\n/).filter(l=>l.trim()!=='').join('\n');}
 
 function syncCurrentFromOpen(){
