@@ -1,43 +1,88 @@
 /* --------- Utils --------- */
 
 // ===== [BOOK-HEAD CHIPS] 각 책의 1장 첫 단락 '설교' 오른쪽에 칩스 배치 =====
+// ===== [BOOK-HEAD CHIPS v2] 각 책의 1장 첫 단락 '설교' 오른쪽에 칩스 배치 (견고) =====
 function ensureBookHeadChips(){
   const doc = document;
 
-  // 0) 기존에 흩어져있던 칩스 제거 (전역/책요약/단락칩스)
+  // A. 기존에 흩어져 있던 칩스 제거(요청 위치에만 보이게)
   doc.getElementById('globalBookChips')?.remove();
   doc.querySelectorAll('.unit-chips, .book-chips, .bookhead-chips').forEach(el=> el.remove());
 
-  // 1) 책(details.book) 순회
+  // B. 책(details.book) 순회
   const books = doc.querySelectorAll('details.book');
   if (!books.length) return;
 
   books.forEach(bookEl => {
-    // 책 summary (openBookEditor용)
     const bookSummary = bookEl.querySelector(':scope > summary');
     if (!bookSummary) return;
 
-    // 1장 찾기: 구조가 buildTree 기준으로 정렬되어 있으므로 첫 details가 1장
-    const chapEls = bookEl.querySelectorAll(':scope > .chapters > details');
+    // B-1) 챕터 목록 찾기(빌드 구조 편차 허용)
+    // 기본: :scope > .chapters > details
+    let chapEls = bookEl.querySelectorAll(':scope > .chapters > details');
+    if (!chapEls.length) {
+      // fallback: 책 내부 details(장) 전부 수집
+      chapEls = bookEl.querySelectorAll(':scope details');
+    }
     if (!chapEls.length) return;
-    const ch1 = chapEls[0]; // 1장 가정(빌드 기준)
 
-    // 1장의 첫 단락
-    const firstPara = ch1.querySelector(':scope > .paras > details.para');
+    // B-2) 1장(최소 장번호) 선택
+    // summary 텍스트에서 숫자 추출해 정렬
+    const chapArr = Array.from(chapEls)
+      .map(el => {
+        const sum = el.querySelector(':scope > summary');
+        const m = (sum?.textContent||'').match(/(\d+)\s*장/);
+        const num = m ? parseInt(m[1], 10) : Infinity;
+        return {el, num};
+      })
+      .filter(x => Number.isFinite(x.num))
+      .sort((a,b)=> a.num - b.num);
+
+    const ch1 = chapArr.length ? chapArr[0].el : chapEls[0];
+    if (!ch1) return;
+
+    // B-3) 1장의 첫 단락(details.para)
+    let firstPara = ch1.querySelector(':scope > .paras > details.para');
+    if (!firstPara) {
+      // fallback: 장 내부에서 첫 .para
+      firstPara = ch1.querySelector(':scope details.para, details.para');
+    }
     if (!firstPara) return;
 
-    // ‘설교’ 버튼 확보 (없으면 보강 루틴 호출 후 재시도)
-    let sermBtn = firstPara.querySelector(':scope .ptoolbar .sermBtn');
-    if (!sermBtn) {
-      if (typeof ensureSermonButtons === 'function') ensureSermonButtons();
-      sermBtn = firstPara.querySelector(':scope .ptoolbar .sermBtn');
+    // C. 설교 버튼 확보 (없으면 보강 루틴으로 생성 시도)
+    // 표준 위치: .ptoolbar 내부 .sermBtn
+    let tool = firstPara.querySelector(':scope .ptoolbar');
+    if (!tool) {
+      // ptoolbar 자체가 없다면 만듭니다(기존 layout 유지)
+      tool = doc.createElement('div');
+      tool.className = 'ptoolbar';
+      // 보통 pbody 안에 있으므로 우선 pbody 찾기
+      const pbody = firstPara.querySelector(':scope .pbody') || firstPara;
+      // 툴바를 맨 위에 삽입
+      pbody.insertAdjacentElement('afterbegin', tool);
     }
-    if (!sermBtn) return;
 
-    // 이미 붙어있다면 중복 방지
+    let sermBtn = tool.querySelector(':scope .sermBtn');
+    if (!sermBtn) {
+      // 기존 보강 함수가 있다면 우선 호출
+      if (typeof ensureSermonButtons === 'function') {
+        ensureSermonButtons();
+        sermBtn = tool.querySelector(':scope .sermBtn');
+      }
+    }
+    // 그래도 없으면 최소 버튼 생성
+    if (!sermBtn) {
+      sermBtn = doc.createElement('button');
+      sermBtn.className = 'sermBtn';
+      sermBtn.type = 'button';
+      sermBtn.textContent = '설교';
+      tool.appendChild(sermBtn);
+    }
+
+    // 이미 붙어있으면 중복 방지
     if (sermBtn.nextElementSibling?.classList?.contains('bookhead-chips')) return;
 
-    // 2) 칩스 생성 및 삽입(‘설교’ 버튼 오른쪽)
+    // D. 칩스 생성 및 삽입(설교 버튼 오른쪽)
     const wrap = doc.createElement('span');
     wrap.className = 'bookhead-chips';
     wrap.innerHTML = `
@@ -47,12 +92,12 @@ function ensureBookHeadChips(){
     `;
     sermBtn.insertAdjacentElement('afterend', wrap);
 
-    // 3) 클릭 → 책 단위 에디터 오픈
+    // E. 클릭 → 책 단위 에디터 오픈
     wrap.addEventListener('click', (e)=>{
       const btn = e.target.closest('.bookhead-chip');
       if (!btn) return;
       e.stopPropagation();
-      // 책은 반드시 열어 두기(요청 UI 가시성 보장)
+      // 책을 열어 가시성 보장
       if (!bookEl.hasAttribute('open')) bookEl.setAttribute('open','');
       if (typeof openBookEditor === 'function') {
         openBookEditor(btn.dataset.type, bookSummary);
@@ -62,8 +107,6 @@ function ensureBookHeadChips(){
     });
   });
 }
-
-// 콘솔에서도 호출 가능
 window.ensureBookHeadChips = ensureBookHeadChips;
 
 // ===== [GLOBAL BOOK CHIPS] 헤더의 '서식가져오기' 오른쪽에 전역 칩스 =====
