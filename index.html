@@ -256,28 +256,31 @@
     .unit-chip  { color: var(--text, #e6e8ef) !important; border-color: var(--border, #252a36) !important; }
     summary { position: relative; } /* summary 내 인라인 배치 안정화 */
 
-    /* ===== Global Book Chips (서식가져오기 오른쪽) ===== */
-    #globalBookChips {
-      display: inline-flex;
-      gap: 6px;
-      margin-left: 8px;
+    /* ===== [GLOBAL BOOK CHIPS] 헤더 오른쪽 칩스 ===== */
+    #globalBookChips{
+      display:inline-flex;
+      gap:6px;
+      margin-left:8px;
+      opacity:.85;
+      align-items:center;
     }
     #globalBookChips .book-chip{
-      font: 600 11px/1.8 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
-      padding: 0 10px;
-      border-radius: 999px;
-      cursor: pointer;
-      border: 1px solid var(--border, #252a36);
-      background: color-mix(in srgb, var(--bg, #0f1115) 92%, #ffffff 8%);
-      color: color-mix(in srgb, var(--text, #e6e8ef) 28%, var(--bg, #0f1115) 72%);
-      transition: opacity .15s ease, color .15s ease, border-color .15s ease, background .15s ease;
+      font:600 11px/1.9 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+      padding:0 10px;
+      border-radius:999px;
+      cursor:pointer;
+      border:1px solid var(--border,#252a36);
+      background: color-mix(in srgb, var(--bg,#0f1115) 92%, #fff 8%);
+      color: color-mix(in srgb, var(--text,#e6e8ef) 28%, var(--bg,#0f1115) 72%);
+      transition: background .15s ease, color .15s ease, border-color .15s ease, opacity .15s ease;
     }
     #globalBookChips .book-chip:hover{
-      opacity: 1;
-      color: var(--text, #e6e8ef);
-      border-color: color-mix(in srgb, var(--border, #252a36) 60%, var(--text, #e6e8ef) 40%);
-      background: color-mix(in srgb, var(--bg, #0f1115) 85%, #ffffff 15%);
+      opacity:1;
+      color:var(--text,#e6e8ef);
+      border-color: color-mix(in srgb, var(--border,#252a36) 60%, var(--text,#e6e8ef) 40%);
+      background: color-mix(in srgb, var(--bg,#0f1115) 85%, #fff 15%);
     }
+
 
   </style>
 
