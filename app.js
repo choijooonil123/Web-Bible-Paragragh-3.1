@@ -1,7 +1,7 @@
 /* --------- Utils --------- */
 
 // ===== [FORMAT-PERSIST BACKUP] 내보내기/가져오기 유틸 (WBP3_FMT) BEGIN =====
-const FMT_NS = typeof FMT_NS === 'string' ? FMT_NS : 'WBP3_FMT'; // 이미 있으면 재사용
+// const FMT_NS = typeof FMT_NS === 'string' ? FMT_NS : 'WBP3_FMT'; // 이미 있으면 재사용
 
 function wbpExportFormats(){
   try{
@@ -206,7 +206,7 @@ function _wrapRunsToHTML(text, spans){
 // ===== [FORMAT-PERSIST/RUNS] END =====
 
 // ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage, v2 runs) BEGIN =====
-// const FMT_NS = 'WBP3_FMT';
+const FMT_NS = 'WBP3_FMT';
 
 function getOpenParaKeyAndEls(){
   // 현재 열려있는 단락(details.para[open])과 키 구성
