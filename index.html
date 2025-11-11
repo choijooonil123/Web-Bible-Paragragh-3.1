@@ -201,6 +201,56 @@
     details.para .pcontent[contenteditable="true"]{
       outline: 1px dashed #3b4b7a; outline-offset: 2px;
     }
+
+    /* ===== Unit Chips (ptitle 옆 흐릿한 버튼) ===== */
+    .unit-chips { display:inline-flex; gap:6px; margin-left:8px; vertical-align:middle; }
+    .unit-chip {
+      font: 600 11px/1.8 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      padding: 0 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border, #252a36);
+      background: color-mix(in srgb, var(--bg, #0f1115) 92%, #ffffff 8%);
+      color: color-mix(in srgb, var(--text, #e6e8ef) 28%, var(--bg, #0f1115) 72%);
+      opacity: .72;
+      transition: opacity .15s ease, color .15s ease, border-color .15s ease, background .15s ease;
+      cursor: pointer;
+    }
+    .unit-chip:hover {
+      opacity: 1;
+      color: var(--text, #e6e8ef);
+      border-color: color-mix(in srgb, var(--border, #252a36) 60%, var(--text, #e6e8ef) 40%);
+      background: color-mix(in srgb, var(--bg, #0f1115) 85%, #ffffff 15%);
+    }
+    .unit-chip:active { transform: translateY(1px); }
+
+    /* ===== Unit Editor (오른쪽 하단 팝업) ===== */
+    .unit-editor {
+      position: fixed; right: 16px; bottom: 16px;
+      width: min(520px, 92vw); height: 60vh;
+      background: var(--panel, #161922);
+      border: 1px solid var(--border, #252a36);
+      border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
+      display: none; flex-direction: column; z-index: 100000;
+    }
+    .unit-editor header {
+      display:flex; align-items:center; justify-content:space-between; gap:8px;
+      padding:10px 12px; border-bottom:1px solid var(--border, #252a36);
+    }
+    .unit-editor header .ue-title {
+      font-weight:700; color: var(--text, #e6e8ef); font-size: 13px;
+    }
+    .unit-editor .ue-actions { display:flex; gap:8px; }
+    .unit-editor .ue-actions button {
+      font-size:12px; padding:6px 10px; border-radius:8px; border:1px solid var(--border, #252a36);
+      background: color-mix(in srgb, var(--panel, #161922) 90%, #ffffff 10%);
+      color: var(--text, #e6e8ef); cursor:pointer;
+    }
+    .unit-editor .ue-actions button:hover { background: color-mix(in srgb, var(--panel, #161922) 80%, #ffffff 20%); }
+    .unit-editor textarea {
+      width: 100%; height: 100%; flex:1; resize:none; outline:none; border:0; padding:12px;
+      background: transparent; color: var(--text, #e6e8ef); font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, "Noto Sans KR", monospace;
+    }
+
   </style>
 
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Nanum+Myeongjo&display=swap" rel="stylesheet">
