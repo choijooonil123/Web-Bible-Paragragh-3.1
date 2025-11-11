@@ -489,12 +489,34 @@ function safeBindFmtButtons(){
 // ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 END =====
 
 // ===== [UNIT-EDITOR] ptitle 옆 버튼 주입 =====
+// ===== [UNIT-EDITOR] ptitle 옆 버튼 주입 (견고 버전) =====
 function ensureUnitChips(){
   const open = document.querySelector('details.para[open]');
   if(!open) return;
-  const title = open.querySelector('summary .ptitle');
-  if(!title) return;
 
+  // 1) ptitle 우선 시도, 없으면 summary 자체 사용
+  let title = open.querySelector('summary .ptitle');
+  if (!title) {
+    const sum = open.querySelector('summary');
+    if (!sum) return;
+    // summary 안의 첫 텍스트 노드를 span.ptitle로 감싸기 (한 번만)
+    title = sum.querySelector('.ptitle');
+    if (!title) {
+      title = document.createElement('span');
+      title.className = 'ptitle';
+      // 텍스트 노드 앞에 삽입
+      sum.insertBefore(title, sum.firstChild);
+      // 기존 텍스트를 title로 옮김
+      // (이미 텍스트가 없는 구조면 이 단계는 영향 없음)
+      const txt = sum.childNodes[1];
+      if (txt && txt.nodeType === Node.TEXT_NODE) {
+        title.textContent = txt.nodeValue.trim();
+        txt.nodeValue = '';
+      }
+    }
+  }
+
+  // 2) 이미 만들어져 있으면 중복 생성 금지
   let wrap = title.querySelector('.unit-chips');
   if (!wrap) {
     wrap = document.createElement('span');
@@ -506,11 +528,12 @@ function ensureUnitChips(){
     `;
     title.appendChild(wrap);
 
+    // 클릭 핸들러 (한 번만)
     wrap.addEventListener('click', (e)=>{
       const btn = e.target.closest('.unit-chip');
       if (!btn) return;
       openUnitEditor(btn.dataset.type);
-    });
+    }, { once: false });
   }
 }
 
