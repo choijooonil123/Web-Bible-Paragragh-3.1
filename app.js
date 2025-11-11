@@ -206,6 +206,63 @@ function _wrapRunsToHTML(text, spans){
 // ===== [FORMAT-PERSIST/RUNS] END =====
 
 // ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage, v2 runs) BEGIN =====
+
+// ---- (ADD) 현재 열린 단락 서식초기화 ----
+function clearFormatForOpenPara(){
+  // 1) 현재 열린 단락 컨텍스트
+  const ctx = (typeof getOpenParaKeyAndEls === 'function') ? getOpenParaKeyAndEls() : null;
+  if(!ctx){ alert('열려있는 단락을 찾을 수 없습니다.'); return; }
+
+  // 2) localStorage 저장본 삭제 (그 단락만)
+  try{
+    localStorage.removeItem(ctx.key);
+  }catch(e){
+    console.warn('localStorage remove 실패:', e);
+  }
+
+  // 3) 화면의 인라인 서식 제거 (.pline .content 우선)
+  const SKIP_SELECTOR = 'sup, sup.pv, .pv, .pvnum, .verse-no'; // 절번호 등은 건드리지 않음
+  const isEmptyStyle = (el) => !el.getAttribute('style') || el.getAttribute('style').trim()==='';
+
+  const stripInlineFormat = (root)=>{
+    if(!root) return;
+    // 굵게/기울임/밑줄/취소선/mark/font → 언랩 (태그 제거, 텍스트만 남김)
+    root.querySelectorAll('b,i,u,s,mark,font').forEach(el=>{
+      if (el.matches(SKIP_SELECTOR)) return;
+      const frag = document.createDocumentFragment();
+      while(el.firstChild) frag.appendChild(el.firstChild);
+      el.replaceWith(frag);
+    });
+    // span의 색/배경색 제거. 쓸모없어지면 언랩
+    root.querySelectorAll('span').forEach(el=>{
+      if (el.matches(SKIP_SELECTOR)) return;
+      const style = el.getAttribute('style') || '';
+      // 색 관련 속성 비우기
+      el.style && (el.style.color = '', el.style.backgroundColor = '');
+      // color/background만 있었던 경우 style 비우기
+      if (style) {
+        const s = el.getAttribute('style') || '';
+        if (!s || s.trim()==='') el.removeAttribute('style');
+      }
+      // 클래스/데이터/아이디 등 메타가 없고 style도 없으면 언랩
+      if (!el.classList.length && !el.attributes.length) {
+        const frag = document.createDocumentFragment();
+        while(el.firstChild) frag.appendChild(el.firstChild);
+        el.replaceWith(frag);
+      }
+    });
+  };
+
+  // 각 절문장에 적용
+  for (const lineEl of ctx.lineEls){
+    const root = lineEl.matches('.content') ? lineEl : (lineEl.querySelector('.content') || lineEl);
+    stripInlineFormat(root);
+  }
+
+  // 4) 상태 표시
+  if (typeof status === 'function') status('서식초기화 완료 (해당 단락만)');
+}
+
 const FMT_NS = 'WBP3_FMT';
 
 function getOpenParaKeyAndEls(){
@@ -248,7 +305,6 @@ function saveFormatForOpenPara(){
     alert('서식 저장 중 오류가 발생했습니다.');
   }
 }
-
 
 function restoreFormatForOpenPara(){
   const ctx = getOpenParaKeyAndEls();
@@ -352,6 +408,13 @@ function ensureFormatButtons(){
   btnLoad.addEventListener('click', restoreFormatForOpenPara);
   btnExp.addEventListener('click', wbpExportFormats);
   btnImp.addEventListener('click', wbpImportFormatsFromFile);
+
+  // (ADD) 서식초기화 버튼에 핸들러 1회 바인딩
+  if (anchor && !anchor.dataset.fmtResetBound) {
+    anchor.addEventListener('click', (e)=>{ e.preventDefault(); clearFormatForOpenPara(); });
+    anchor.dataset.fmtResetBound = '1';
+  }
+
 }
 
 function safeBindFmtButtons(){
