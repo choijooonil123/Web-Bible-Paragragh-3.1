@@ -258,6 +258,30 @@
 
     /* summary 오른쪽 여백 확보 + 칩스 고정 위치 */
 
+    /* ===== Global Unit Chips (헤더 우측 고정) ===== */
+    #unitGlobalChips {
+      display: flex; gap: 8px; align-items: center;
+      margin-left: auto;
+    }
+    .unit-chip {
+      font: 600 11px/1.8 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+      padding: 0 10px; border-radius: 999px;
+      border: 1px solid var(--border, #252a36);
+      background: color-mix(in srgb, var(--bg, #0f1115) 92%, #ffffff 8%);
+      color: color-mix(in srgb, var(--text, #e6e8ef) 28%, var(--bg, #0f1115) 72%);
+      opacity: .78; cursor: pointer;
+      transition: opacity .15s ease, color .15s ease, border-color .15s ease, background .15s ease;
+    }
+    .unit-chip:hover {
+      opacity: 1;
+      color: var(--text, #e6e8ef);
+      border-color: color-mix(in srgb, var(--border, #252a36) 60%, var(--text, #e6e8ef) 40%);
+      background: color-mix(in srgb, var(--bg, #0f1115) 85%, #ffffff 15%);
+    }
+
+    /* ===== 기존(summary 내부) 칩스는 숨김 처리하여 갈라짐 방지 ===== */
+    details.para summary .unit-chips { display: none !important; }
+
   </style>
 
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Nanum+Myeongjo&display=swap" rel="stylesheet">
