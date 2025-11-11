@@ -1,5 +1,83 @@
 /* --------- Utils --------- */
 
+// ===== [FORMAT-PERSIST BACKUP] 내보내기/가져오기 유틸 (WBP3_FMT) BEGIN =====
+const FMT_NS = typeof FMT_NS === 'string' ? FMT_NS : 'WBP3_FMT'; // 이미 있으면 재사용
+
+function wbpExportFormats(){
+  try{
+    const keys = Object.keys(localStorage).filter(k => k.startsWith(FMT_NS + ':'));
+    const items = keys.map(k => ({ key: k, value: JSON.parse(localStorage.getItem(k) || 'null') }));
+    const payload = {
+      ns: FMT_NS,
+      exportedAt: new Date().toISOString(),
+      count: items.length,
+      items
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date(); // YYYYMMDD-HHMMSS
+    const pad = n => String(n).padStart(2,'0');
+    const fname = `wbp-format-backup-${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.json`;
+    a.href = url; a.download = fname; document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
+    if (typeof status === 'function') status(`서식 내보내기 완료 (${items.length}개)`);
+  }catch(e){
+    console.error(e);
+    alert('서식 내보내기 중 오류가 발생했습니다.');
+  }
+}
+
+function wbpImportFormatsFromFile(){
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json,.json';
+  input.onchange = () => {
+    const file = input.files && input.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const json = JSON.parse(String(reader.result||'{}'));
+        // 허용 포맷: {ns, exportedAt, items:[{key,value}]} 또는 { "<key>": <value>, ... }
+        let kvList = [];
+        if (Array.isArray(json.items)) {
+          kvList = json.items;
+        } else {
+          kvList = Object.keys(json).map(k => ({ key: k, value: json[k] }));
+        }
+        // 네임스페이스 키만 반영
+        const onlyFmt = kvList.filter(rec => typeof rec.key === 'string' && rec.key.startsWith(FMT_NS + ':'));
+        if (onlyFmt.length === 0) {
+          alert('가져올 WBP 서식 키를 찾지 못했습니다.');
+          return;
+        }
+        // 덮어쓰기 확인
+        const overwrite = confirm(`${onlyFmt.length}개의 서식 데이터를 가져옵니다.\n동일 키는 덮어쓰기 됩니다. 계속할까요?`);
+        if(!overwrite) return;
+
+        let applied = 0;
+        for(const rec of onlyFmt){
+          try{
+            localStorage.setItem(rec.key, JSON.stringify(rec.value ?? null));
+            applied++;
+          }catch(e){
+            console.warn('skip:', rec.key, e);
+          }
+        }
+        if (typeof status === 'function') status(`서식 가져오기 완료 (${applied}개 적용)`);
+        alert(`가져오기 완료: ${applied}개 적용`);
+      }catch(e){
+        console.error(e);
+        alert('서식 가져오기 중 오류가 발생했습니다. JSON 형식을 확인하세요.');
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+// ===== [FORMAT-PERSIST BACKUP] 내보내기/가져오기 유틸 (WBP3_FMT) END =====
+
 // ===== [FORMAT-PERSIST/RUNS] 위치정보(오프셋) 추출 및 HTML 재구성 유틸 BEGIN =====
 function _collectTextAndRuns(rootEl){
   const spans = [];
@@ -214,24 +292,28 @@ function restoreFormatForOpenPara(){
 // ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage, v2 runs) END =====
 
 // ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 BEGIN =====
-// ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 BEGIN =====
 function ensureFormatButtons(){
   const doc = document;
 
-  // 1) 우선 "서식초기화" 버튼 앵커 찾기 (id 우선, 텍스트 포함 검색)
+  // 1) "서식초기화" 버튼 앵커
   let anchor =
     doc.getElementById('btnFmtReset') ||
     Array.from(doc.querySelectorAll('button')).find(b => (b.textContent||'').trim().includes('서식초기화'));
 
-  // 2) 호스트 fallback
+  // 2) 호스트
   const headerEl = doc.querySelector('header');
   const host = (anchor && anchor.parentElement) || headerEl || doc.body;
 
-  // 3) 중복 생성 방지 + 재배치 로직
+  // 3) 중복 검사
   const existSave = doc.getElementById('btnFmtSave');
   const existLoad = doc.getElementById('btnFmtLoad');
-  if (existSave && existLoad) {
-    if (anchor && existLoad.nextElementSibling !== anchor) {
+  const existExp  = doc.getElementById('btnFmtExport');
+  const existImp  = doc.getElementById('btnFmtImport');
+  if (existSave && existLoad && existExp && existImp) {
+    if (anchor && existImp.nextElementSibling !== anchor) {
+      // 배치: [저장][회복][내보내기][가져오기][서식초기화]
+      anchor.insertAdjacentElement('beforebegin', existImp);
+      anchor.insertAdjacentElement('beforebegin', existExp);
       anchor.insertAdjacentElement('beforebegin', existLoad);
       anchor.insertAdjacentElement('beforebegin', existSave);
     }
@@ -239,52 +321,44 @@ function ensureFormatButtons(){
   }
 
   // 4) 새 버튼 생성
-  const btnSave = doc.createElement('button');
-  btnSave.id = 'btnFmtSave';
-  btnSave.type = 'button';
-  btnSave.textContent = '서식저장';
-  btnSave.style.marginRight = '6px';
-  btnSave.className = 'fmt-btn';
+  const mkBtn = (id, label) => {
+    const b = doc.createElement('button');
+    b.id = id; b.type='button'; b.textContent = label;
+    b.style.marginRight = '6px'; b.className = 'fmt-btn';
+    return b;
+  };
+  const btnSave = existSave || mkBtn('btnFmtSave','서식저장');
+  const btnLoad = existLoad || mkBtn('btnFmtLoad','서식회복');
+  const btnExp  = existExp  || mkBtn('btnFmtExport','서식내보내기');
+  const btnImp  = existImp  || mkBtn('btnFmtImport','서식가져오기');
 
-  const btnLoad = doc.createElement('button');
-  btnLoad.id = 'btnFmtLoad';
-  btnLoad.type = 'button';
-  btnLoad.textContent = '서식회복';
-  btnLoad.style.marginRight = '6px';
-  btnLoad.className = 'fmt-btn';
-
-  // 5) 삽입: anchor 왼쪽 우선, 없으면 host 끝에 붙임
+  // 5) 삽입: anchor 왼쪽
   if (anchor) {
+    anchor.insertAdjacentElement('beforebegin', btnImp);
+    anchor.insertAdjacentElement('beforebegin', btnExp);
     anchor.insertAdjacentElement('beforebegin', btnLoad);
-    btnLoad.insertAdjacentElement('beforebegin', btnSave);
+    anchor.insertAdjacentElement('beforebegin', btnSave);
   } else if (host) {
-    host.appendChild(btnSave);
-    host.appendChild(btnLoad);
+    host.append(btnSave, btnLoad, btnExp, btnImp);
   } else {
-    // 매우 드문 경우: body에 플로팅
     const float = doc.createElement('div');
-    float.style.position = 'fixed';
-    float.style.right = '12px';
-    float.style.bottom = '12px';
-    float.style.display = 'flex';
-    float.style.gap = '8px';
-    float.style.zIndex = '99999';
-    float.appendChild(btnSave);
-    float.appendChild(btnLoad);
+    float.style.cssText = 'position:fixed;right:12px;bottom:12px;display:flex;gap:8px;z-index:99999';
+    float.append(btnSave, btnLoad, btnExp, btnImp);
     doc.body.appendChild(float);
   }
 
-  // 6) 클릭 이벤트 연결
+  // 6) 클릭 이벤트
   btnSave.addEventListener('click', saveFormatForOpenPara);
   btnLoad.addEventListener('click', restoreFormatForOpenPara);
+  btnExp.addEventListener('click', wbpExportFormats);
+  btnImp.addEventListener('click', wbpImportFormatsFromFile);
 }
 
 function safeBindFmtButtons(){
   try{ ensureFormatButtons(); }
   catch(e){ console.error('ensureFormatButtons error:', e); }
 }
-// ===== [FORMAT-PERSIST UI] END =====
-
+// ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 END =====
 
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
 const el = id => document.getElementById(id);
