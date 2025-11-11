@@ -282,6 +282,35 @@
     /* ===== 기존(summary 내부) 칩스는 숨김 처리하여 갈라짐 방지 ===== */
     details.para summary .unit-chips { display: none !important; }
 
+    /* ===== Book-level Chips (성경명칭 옆) ===== */
+    details.book > summary { position: relative; padding-right: 180px; } /* 칩스 자리 확보 */
+    details.book > summary .btitle { white-space: nowrap; }              /* 책 제목 줄바꿈 방지 */
+
+    details.book > summary > .book-chips {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      display: inline-flex; gap: 6px; white-space: nowrap;
+      opacity: .78; pointer-events: auto; z-index: 3;
+    }
+    .book-chip{
+      font: 600 11px/1.8 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+      padding: 0 10px; border-radius: 999px;
+      border: 1px solid var(--border, #252a36);
+      background: color-mix(in srgb, var(--bg, #0f1115) 92%, #ffffff 8%);
+      color: color-mix(in srgb, var(--text, #e6e8ef) 28%, var(--bg, #0f1115) 72%);
+      transition: opacity .15s ease, color .15s ease, border-color .15s ease, background .15s ease;
+      cursor: pointer;
+    }
+    .book-chip:hover {
+      opacity: 1;
+      color: var(--text, #e6e8ef);
+      border-color: color-mix(in srgb, var(--border, #252a36) 60%, var(--text, #e6e8ef) 40%);
+      background: color-mix(in srgb, var(--bg, #0f1115) 85%, #ffffff 15%);
+    }
+
+    /* (선택) 과거 단락(ptitle) 옆 칩스가 남아있다면 숨김 처리해 갈라짐 방지 */
+    details.para summary .unit-chips { display: none !important; }
+
+
   </style>
 
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Nanum+Myeongjo&display=swap" rel="stylesheet">
