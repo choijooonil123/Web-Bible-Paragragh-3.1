@@ -29,18 +29,45 @@ function ensureGlobalBookChips(){
       if(!btn) return;
       e.stopPropagation();
 
-      // 열린 책(summary) 찾기
-      const bookSummary = doc.querySelector('details.book[open] > summary');
-      if(!bookSummary){
-        alert('열린 성경(책)이 없습니다. 먼저 책을 여세요.');
+      // ✅ 책 summary를 유연하게 찾는 헬퍼
+      const getCurrentBookSummary = () => {
+        // 1) 현재 열린 단락이 있으면 그 단락이 속한 책
+        const openPara = document.querySelector('details.para[open]');
+        if (openPara) {
+          const bookEl = openPara.closest('details.book');
+          if (bookEl) {
+            if (!bookEl.hasAttribute('open')) bookEl.setAttribute('open','');
+            const sum = bookEl.querySelector(':scope > summary');
+            if (sum) return sum;
+          }
+        }
+        // 2) 이미 열려 있는 책
+        const opened = document.querySelector('details.book[open] > summary');
+        if (opened) return opened;
+
+        // 3) 아무 책도 안 열려 있으면 첫 번째 책을 자동으로 열기
+        const first = document.querySelector('details.book > summary');
+        if (first) {
+          const bookEl = first.parentElement;
+          if (bookEl && !bookEl.hasAttribute('open')) bookEl.setAttribute('open','');
+          return first;
+        }
+        return null;
+      };
+
+      const bookSummary = getCurrentBookSummary();
+      if (!bookSummary) {
+        alert('성경(책)을 찾지 못했습니다. 트리가 렌더링되었는지 확인하세요.');
         return;
       }
+
       if (typeof openBookEditor === 'function') {
         openBookEditor(btn.dataset.type, bookSummary);
       } else {
         alert('openBookEditor 함수가 없습니다.');
       }
     });
+
   }
 
   // 항상 '서식가져오기' 오른쪽에 위치 보정
