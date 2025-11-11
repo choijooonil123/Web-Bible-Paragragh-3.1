@@ -251,11 +251,10 @@
       background: transparent; color: var(--text, #e6e8ef); font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, "Noto Sans KR", monospace;
     }
 
-    /* 보기 문제시 임시 가시성 부스트 (확실히 보이게) */
-    .unit-chips { opacity: 0.9 !important; }
+    /* ===== Unit Chips: 가시성 보장(임시 강제) ===== */
+    .unit-chips { display:inline-flex !important; gap:6px; margin-left:8px; vertical-align:middle; opacity:1 !important; }
     .unit-chip  { color: var(--text, #e6e8ef) !important; border-color: var(--border, #252a36) !important; }
-
-    .unit-chips { outline: 1px dashed #888; }
+    summary { position: relative; } /* summary 내 인라인 배치 안정화 */
 
   </style>
 
