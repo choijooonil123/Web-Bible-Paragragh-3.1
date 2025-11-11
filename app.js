@@ -1,5 +1,54 @@
 /* --------- Utils --------- */
 
+// ===== [GLOBAL BOOK CHIPS] 헤더의 '서식가져오기' 오른쪽에 전역 칩스 =====
+function ensureGlobalBookChips(){
+  const doc = document;
+
+  // 헤더 찾기
+  const header = doc.querySelector('header');
+  if (!header) return;
+
+  // 기준 버튼: '서식가져오기' (없으면 아무 버튼 뒤에)
+  const anchor =
+    doc.getElementById('btnFmtLoad') ||
+    Array.from(doc.querySelectorAll('button')).find(b => (b.textContent||'').includes('서식가져오기'));
+
+  // 이미 존재하면 중복 생성 방지
+  if (doc.getElementById('globalBookChips')) return;
+
+  // 칩스 컨테이너 생성
+  const wrap = doc.createElement('span');
+  wrap.id = 'globalBookChips';
+  wrap.style.display = 'inline-flex';
+  wrap.style.gap = '6px';
+  wrap.style.marginLeft = '8px';
+  wrap.innerHTML = `
+    <button type="button" class="book-chip" data-type="basic">기본이해</button>
+    <button type="button" class="book-chip" data-type="structure">내용구조</button>
+    <button type="button" class="book-chip" data-type="summary">메세지요약</button>
+  `;
+
+  // 기준 버튼 뒤에 삽입
+  if (anchor) anchor.insertAdjacentElement('afterend', wrap);
+  else header.appendChild(wrap);
+
+  // 클릭 이벤트
+  wrap.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.book-chip');
+    if (!btn) return;
+    e.stopPropagation();
+
+    // 현재 열린 책 찾기
+    const openBook = doc.querySelector('details.book[open] > summary');
+    if (!openBook){
+      alert('열린 성경(책)을 찾을 수 없습니다. 책을 먼저 여세요.');
+      return;
+    }
+    openBookEditor(btn.dataset.type, openBook); // 기존 openBookEditor 재사용
+  });
+}
+window.ensureGlobalBookChips = ensureGlobalBookChips;
+
 // ===== [BOOK-UNIT EDITOR] 성경(책) 단위 에디터 & 칩스 =====
 const BOOK_UNIT_NS = 'WBP3_BOOKUNIT';
 
@@ -2540,15 +2589,15 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       safeBindFmtButtons();
-      ensureBookChips();          // 👈 추가: 책 단위 칩스
+      ensureGlobalBookChips();   // 👈 추가
     });
   } else {
     safeBindFmtButtons();
-    ensureBookChips();            // 👈 추가
+    ensureGlobalBookChips();     // 👈 추가
   }
   document.addEventListener('wbp:treeBuilt', ()=> setTimeout(()=>{
     safeBindFmtButtons();
-    ensureBookChips();            // 👈 추가 (트리 재구성 시에도 보장)
+    ensureGlobalBookChips();     // 👈 추가
   }, 0));
   // ===== [INIT HOOK] END =====
 
