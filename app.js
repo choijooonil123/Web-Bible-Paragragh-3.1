@@ -490,51 +490,55 @@ function safeBindFmtButtons(){
 
 // ===== [UNIT-EDITOR] ptitle 옆 버튼 주입 =====
 // ===== [UNIT-EDITOR] ptitle 옆 버튼 주입 (견고 버전) =====
+// ===== [UNIT-EDITOR] ptitle 옆 버튼 주입 (전방위 견고 버전) =====
 function ensureUnitChips(){
-  const open = document.querySelector('details.para[open]');
-  if(!open) return;
+  // 열려있는 단락이 없으면 모든 단락에 시도(최초 로드 대비)
+  const paras = document.querySelectorAll('details.para');
+  if (!paras.length) return;
 
-  // 1) ptitle 우선 시도, 없으면 summary 자체 사용
-  let title = open.querySelector('summary .ptitle');
-  if (!title) {
-    const sum = open.querySelector('summary');
+  paras.forEach(para => {
+    const sum = para.querySelector('summary');
     if (!sum) return;
-    // summary 안의 첫 텍스트 노드를 span.ptitle로 감싸기 (한 번만)
-    title = sum.querySelector('.ptitle');
-    if (!title) {
-      title = document.createElement('span');
-      title.className = 'ptitle';
-      // 텍스트 노드 앞에 삽입
-      sum.insertBefore(title, sum.firstChild);
-      // 기존 텍스트를 title로 옮김
-      // (이미 텍스트가 없는 구조면 이 단계는 영향 없음)
-      const txt = sum.childNodes[1];
-      if (txt && txt.nodeType === Node.TEXT_NODE) {
-        title.textContent = txt.nodeValue.trim();
-        txt.nodeValue = '';
+
+    // 1) ptitle 확보: 없으면 summary 텍스트를 감싸서 생성
+    let t = sum.querySelector('.ptitle');
+    if (!t) {
+      t = document.createElement('span');
+      t.className = 'ptitle';
+      // summary 첫 번째 노드가 텍스트라면 그 텍스트를 ptitle로 옮김
+      const first = sum.firstChild;
+      if (first && first.nodeType === Node.TEXT_NODE) {
+        t.textContent = first.nodeValue.trim();
+        first.nodeValue = '';
+        sum.insertBefore(t, sum.firstChild);
+      } else {
+        // 텍스트가 없으면 summary 맨 앞에 빈 ptitle 삽입
+        sum.insertBefore(t, sum.firstChild);
       }
     }
-  }
 
-  // 2) 이미 만들어져 있으면 중복 생성 금지
-  let wrap = title.querySelector('.unit-chips');
-  if (!wrap) {
-    wrap = document.createElement('span');
+    // 2) 이미 있으면 중복 생성 금지
+    if (t.querySelector('.unit-chips')) return;
+
+    // 3) 버튼 삽입
+    const wrap = document.createElement('span');
     wrap.className = 'unit-chips';
     wrap.innerHTML = `
       <button type="button" class="unit-chip" data-type="basic">기본이해</button>
       <button type="button" class="unit-chip" data-type="structure">내용구조</button>
       <button type="button" class="unit-chip" data-type="summary">메세지요약</button>
     `;
-    title.appendChild(wrap);
+    t.appendChild(wrap);
 
-    // 클릭 핸들러 (한 번만)
+    // 4) 클릭 처리 (오픈 단락 기준으로 에디터 열기)
     wrap.addEventListener('click', (e)=>{
       const btn = e.target.closest('.unit-chip');
       if (!btn) return;
+      // 이 버튼이 속한 단락을 "열린" 상태로 만들고 에디터 호출
+      if (!para.hasAttribute('open')) para.setAttribute('open','');
       openUnitEditor(btn.dataset.type);
-    }, { once: false });
-  }
+    });
+  });
 }
 
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
@@ -2360,19 +2364,28 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   const docEl = document.getElementById('doc');
 
   // ===== [FORMAT-PERSIST INIT HOOK] BEGIN =====
+  // 초기 로드
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
+      ensureUnitChips();          // 👈 추가
       safeBindFmtButtons();
-      ensureUnitChips();          // 👈 여기에 추가
     });
   } else {
+    ensureUnitChips();            // 👈 추가
     safeBindFmtButtons();
-    ensureUnitChips();            // 👈 여기에 추가
   }
+  // 트리/DOM 재구성 시
   document.addEventListener('wbp:treeBuilt', ()=> setTimeout(()=>{
+    ensureUnitChips();            // 👈 추가
     safeBindFmtButtons();
-    ensureUnitChips();            // 👈 여기에 추가
   }, 0));
+
+  // details 토글될 때도 보장
+  document.addEventListener('toggle', (e)=>{
+    if (e.target && e.target.matches('details.para')) {
+      ensureUnitChips();          // 👈 추가
+    }
+  }, true);
   // ===== [FORMAT-PERSIST INIT HOOK] END =====
 
   if(!bar || !docEl) return;
