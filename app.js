@@ -1,52 +1,55 @@
 /* --------- Utils --------- */
 
 // ===== [GLOBAL BOOK CHIPS] 헤더의 '서식가져오기' 오른쪽에 전역 칩스 =====
+// ===== [GLOBAL BOOK CHIPS] '서식가져오기' 오른쪽 칩스 주입 =====
 function ensureGlobalBookChips(){
   const doc = document;
 
-  // 헤더 찾기
-  const header = doc.querySelector('header');
-  if (!header) return;
-
-  // 기준 버튼: '서식가져오기' (없으면 아무 버튼 뒤에)
+  // 기준: "서식가져오기" 버튼 찾기
   const anchor =
     doc.getElementById('btnFmtLoad') ||
     Array.from(doc.querySelectorAll('button')).find(b => (b.textContent||'').includes('서식가져오기'));
+  if(!anchor) return;
 
-  // 이미 존재하면 중복 생성 방지
-  if (doc.getElementById('globalBookChips')) return;
+  // 이미 있으면 재배치만
+  let wrap = doc.getElementById('globalBookChips');
+  if(!wrap){
+    wrap = doc.createElement('span');
+    wrap.id = 'globalBookChips';
+    wrap.innerHTML = `
+      <button type="button" class="book-chip" data-type="basic">기본이해</button>
+      <button type="button" class="book-chip" data-type="structure">내용구조</button>
+      <button type="button" class="book-chip" data-type="summary">메세지요약</button>
+    `;
+    anchor.insertAdjacentElement('afterend', wrap);
 
-  // 칩스 컨테이너 생성
-  const wrap = doc.createElement('span');
-  wrap.id = 'globalBookChips';
-  wrap.style.display = 'inline-flex';
-  wrap.style.gap = '6px';
-  wrap.style.marginLeft = '8px';
-  wrap.innerHTML = `
-    <button type="button" class="book-chip" data-type="basic">기본이해</button>
-    <button type="button" class="book-chip" data-type="structure">내용구조</button>
-    <button type="button" class="book-chip" data-type="summary">메세지요약</button>
-  `;
+    // 클릭 → 현재 열린 "책(summary)" 기준 책 단위 에디터 실행
+    wrap.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.book-chip');
+      if(!btn) return;
+      e.stopPropagation();
 
-  // 기준 버튼 뒤에 삽입
-  if (anchor) anchor.insertAdjacentElement('afterend', wrap);
-  else header.appendChild(wrap);
+      // 열린 책(summary) 찾기
+      const bookSummary = doc.querySelector('details.book[open] > summary');
+      if(!bookSummary){
+        alert('열린 성경(책)이 없습니다. 먼저 책을 여세요.');
+        return;
+      }
+      if (typeof openBookEditor === 'function') {
+        openBookEditor(btn.dataset.type, bookSummary);
+      } else {
+        alert('openBookEditor 함수가 없습니다.');
+      }
+    });
+  }
 
-  // 클릭 이벤트
-  wrap.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.book-chip');
-    if (!btn) return;
-    e.stopPropagation();
-
-    // 현재 열린 책 찾기
-    const openBook = doc.querySelector('details.book[open] > summary');
-    if (!openBook){
-      alert('열린 성경(책)을 찾을 수 없습니다. 책을 먼저 여세요.');
-      return;
-    }
-    openBookEditor(btn.dataset.type, openBook); // 기존 openBookEditor 재사용
-  });
+  // 항상 '서식가져오기' 오른쪽에 위치 보정
+  if (wrap.previousElementSibling !== anchor){
+    anchor.insertAdjacentElement('afterend', wrap);
+  }
 }
+
+// 콘솔에서도 호출 가능
 window.ensureGlobalBookChips = ensureGlobalBookChips;
 
 // ===== [BOOK-UNIT EDITOR] 성경(책) 단위 에디터 & 칩스 =====
@@ -2589,16 +2592,22 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       safeBindFmtButtons();
-      ensureGlobalBookChips();   // 👈 추가
+      ensureBookChips?.();          // (기존에 쓰던 경우 그대로 두세요)
+      ensureGlobalBookChips();      // 👈 추가
     });
   } else {
     safeBindFmtButtons();
-    ensureGlobalBookChips();     // 👈 추가
+    ensureBookChips?.();
+    ensureGlobalBookChips();        // 👈 추가
   }
-  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(()=>{
-    safeBindFmtButtons();
-    ensureGlobalBookChips();     // 👈 추가
-  }, 0));
+  document.addEventListener('wbp:treeBuilt', () =>
+    setTimeout(() => {
+      safeBindFmtButtons();
+      ensureBookChips?.();
+      ensureGlobalBookChips();      // 👈 추가 (트리 재구성 시도)
+    }, 0)
+  );
+
   // ===== [INIT HOOK] END =====
 
   if(!bar || !docEl) return;
