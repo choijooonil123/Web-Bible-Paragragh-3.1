@@ -256,97 +256,13 @@
     .unit-chip  { color: var(--text, #e6e8ef) !important; border-color: var(--border, #252a36) !important; }
     summary { position: relative; } /* summary 내 인라인 배치 안정화 */
 
-    /* summary 오른쪽 여백 확보 + 칩스 고정 위치 */
-
-    /* ===== Global Unit Chips (헤더 우측 고정) ===== */
-    #unitGlobalChips {
-      display: flex; gap: 8px; align-items: center;
-      margin-left: auto;
-    }
-    .unit-chip {
-      font: 600 11px/1.8 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
-      padding: 0 10px; border-radius: 999px;
-      border: 1px solid var(--border, #252a36);
-      background: color-mix(in srgb, var(--bg, #0f1115) 92%, #ffffff 8%);
-      color: color-mix(in srgb, var(--text, #e6e8ef) 28%, var(--bg, #0f1115) 72%);
-      opacity: .78; cursor: pointer;
-      transition: opacity .15s ease, color .15s ease, border-color .15s ease, background .15s ease;
-    }
-    .unit-chip:hover {
-      opacity: 1;
-      color: var(--text, #e6e8ef);
-      border-color: color-mix(in srgb, var(--border, #252a36) 60%, var(--text, #e6e8ef) 40%);
-      background: color-mix(in srgb, var(--bg, #0f1115) 85%, #ffffff 15%);
-    }
-
-    /* ===== 기존(summary 내부) 칩스는 숨김 처리하여 갈라짐 방지 ===== */
-    details.para summary .unit-chips { display: none !important; }
-
-    /* ===== Book-level Chips (성경명칭 옆) ===== */
-    details.book > summary { position: relative; padding-right: 180px; } /* 칩스 자리 확보 */
-    details.book > summary .btitle { white-space: nowrap; }              /* 책 제목 줄바꿈 방지 */
-
-    details.book > summary > .book-chips {
-      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-      display: inline-flex; gap: 6px; white-space: nowrap;
-      opacity: .78; pointer-events: auto; z-index: 3;
-    }
-    .book-chip{
-      font: 600 11px/1.8 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
-      padding: 0 10px; border-radius: 999px;
-      border: 1px solid var(--border, #252a36);
-      background: color-mix(in srgb, var(--bg, #0f1115) 92%, #ffffff 8%);
-      color: color-mix(in srgb, var(--text, #e6e8ef) 28%, var(--bg, #0f1115) 72%);
-      transition: opacity .15s ease, color .15s ease, border-color .15s ease, background .15s ease;
-      cursor: pointer;
-    }
-    .book-chip:hover {
-      opacity: 1;
-      color: var(--text, #e6e8ef);
-      border-color: color-mix(in srgb, var(--border, #252a36) 60%, var(--text, #e6e8ef) 40%);
-      background: color-mix(in srgb, var(--bg, #0f1115) 85%, #ffffff 15%);
-    }
-
-    /* (선택) 과거 단락(ptitle) 옆 칩스가 남아있다면 숨김 처리해 갈라짐 방지 */
-    details.para summary .unit-chips { display: none !important; }
-
-    /* ===== Book-level Chips (성경명칭 '위' 배치, 세로 스택) ===== *//* ===== Book Summary 길이 축소 + 칩스 보호 ===== */
-
-    /* summary를 세로 스택으로(칩스 위, 제목 아래), 여백 약간 */
-    details.book > summary{
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 6px;
-      position: relative;
-      padding-right: 0;  /* 우측 여백 불필요 */
-    }
-
-    /* 성경명칭: 길면 한 줄 말줄임(필요하면 아래 2줄 버전으로 변경 가능) */
-    details.book > summary .btitle{
-      max-width: 100%;
-      overflow: hidden;
-      white-space: nowrap;         /* ← 한 줄 */
-      text-overflow: ellipsis;     /* ← 말줄임표 */
-      line-height: 1.35;
-      /* 필요 시 글자 조금 축소
-        font-size: 0.95em; */
-    }
-
-    /* 칩스: 항상 위에 먼저 노출(order:-1), 줄바꿈 허용(좁은 화면 대응), 겹침 방지 여백 */
-    details.book > summary > .book-chips{
-      order: -1;                   /* 맨 위로 */
+    /* ===== Global Book Chips (서식가져오기 오른쪽) ===== */
+    #globalBookChips {
       display: inline-flex;
       gap: 6px;
-      flex-wrap: wrap;             /* 폭 좁으면 자동 줄바꿈 */
-      white-space: nowrap;
-      opacity: .86;
-      z-index: 3;
-      margin-bottom: 2px;          /* 제목과 살짝 간격 */
+      margin-left: 8px;
     }
-
-    /* 칩 모양(그대로 사용) */
-    .book-chip{
+    #globalBookChips .book-chip{
       font: 600 11px/1.8 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
       padding: 0 10px;
       border-radius: 999px;
@@ -356,22 +272,12 @@
       color: color-mix(in srgb, var(--text, #e6e8ef) 28%, var(--bg, #0f1115) 72%);
       transition: opacity .15s ease, color .15s ease, border-color .15s ease, background .15s ease;
     }
-    .book-chip:hover{
+    #globalBookChips .book-chip:hover{
       opacity: 1;
       color: var(--text, #e6e8ef);
       border-color: color-mix(in srgb, var(--border, #252a36) 60%, var(--text, #e6e8ef) 40%);
       background: color-mix(in srgb, var(--bg, #0f1115) 85%, #ffffff 15%);
     }
-
-    /* (선택) 2줄까지 허용하고 말줄임 하려면, 위의 .btitle 블록 대신 이걸 쓰세요.
-    details.book > summary .btitle{
-      display: -webkit-box;
-      -webkit-line-clamp: 2;       /* 2줄 고정 */
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      line-height: 1.35;
-    }
-    */
 
   </style>
 
