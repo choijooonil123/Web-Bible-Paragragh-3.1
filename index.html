@@ -310,29 +310,47 @@
     /* (선택) 과거 단락(ptitle) 옆 칩스가 남아있다면 숨김 처리해 갈라짐 방지 */
     details.para summary .unit-chips { display: none !important; }
 
-    /* ===== Book-level Chips (성경명칭 옆) ===== */
-    details.book > summary { position: relative; padding-right: 180px; }
-    details.book > summary .btitle { white-space: nowrap; }
-
-    details.book > summary > .book-chips {
-      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-      display: inline-flex; gap: 6px; white-space: nowrap;
-      opacity: .78; z-index: 3;
+    /* ===== Book-level Chips (성경명칭 '위' 배치, 세로 스택) ===== */
+    details.book > summary{
+      display: flex;
+      flex-direction: column;       /* 세로 쌓기 */
+      align-items: flex-start;
+      gap: 6px;
+      position: relative;
+      padding-right: 0;             /* 우측 여백 불필요 */
     }
+
+    details.book > summary .btitle{
+      white-space: nowrap;
+      line-height: 1.35;
+    }
+
+    /* 칩스: 이제 절대배치(오른쪽) X, 위 줄로 자연스럽게 */
+    details.book > summary > .book-chips{
+      order: -1;                    /* 맨 위로 끌어올림 */
+      display: inline-flex;
+      gap: 6px;
+      white-space: nowrap;
+      opacity: .78;
+    }
+
     .book-chip{
       font: 600 11px/1.8 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
-      padding: 0 10px; border-radius: 999px; cursor: pointer;
+      padding: 0 10px;
+      border-radius: 999px;
+      cursor: pointer;
       border: 1px solid var(--border, #252a36);
       background: color-mix(in srgb, var(--bg, #0f1115) 92%, #ffffff 8%);
       color: color-mix(in srgb, var(--text, #e6e8ef) 28%, var(--bg, #0f1115) 72%);
       transition: opacity .15s ease, color .15s ease, border-color .15s ease, background .15s ease;
     }
-    .book-chip:hover {
+    .book-chip:hover{
       opacity: 1;
       color: var(--text, #e6e8ef);
       border-color: color-mix(in srgb, var(--border, #252a36) 60%, var(--text, #e6e8ef) 40%);
       background: color-mix(in srgb, var(--bg, #0f1115) 85%, #ffffff 15%);
     }
+
 
   </style>
 
