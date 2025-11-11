@@ -1,5 +1,70 @@
 /* --------- Utils --------- */
 
+// ===== [UNIT-EDITOR] 기본이해/내용구조/메세지요약 팝업 & 저장 =====
+const UNIT_NS = 'WBP3_UNIT';
+
+function _unitKeyFromTitleEl(ptitleEl, type){
+  const b = ptitleEl?.dataset?.book, c = ptitleEl?.dataset?.ch, i = ptitleEl?.dataset?.idx;
+  if(!b || !c || !i) return null;
+  return `${UNIT_NS}:${b}:${c}:${i}:${type}`;
+}
+
+function _ensureUnitEditorHost(){
+  let host = document.getElementById('unitEditor');
+  if (host) return host;
+  host = document.createElement('div');
+  host.id = 'unitEditor';
+  host.className = 'unit-editor';
+  host.innerHTML = `
+    <header>
+      <div class="ue-title">단위 에디터</div>
+      <div class="ue-actions">
+        <button type="button" id="ueSave">저장</button>
+        <button type="button" id="ueClose">닫기</button>
+      </div>
+    </header>
+    <textarea id="ueText" placeholder="여기에 내용을 입력하세요. (자동저장)"></textarea>
+  `;
+  document.body.appendChild(host);
+
+  // 닫기
+  host.querySelector('#ueClose').addEventListener('click', ()=> { host.style.display='none'; });
+  // 저장 (수동)
+  host.querySelector('#ueSave').addEventListener('click', ()=>{
+    const key = host.dataset.key;
+    if (key) localStorage.setItem(key, host.querySelector('#ueText').value || '');
+  });
+  // 자동저장 (디바운스)
+  let _tm = null;
+  host.querySelector('#ueText').addEventListener('input', ()=>{
+    clearTimeout(_tm);
+    _tm = setTimeout(()=>{
+      const key = host.dataset.key;
+      if (key) try{ localStorage.setItem(key, host.querySelector('#ueText').value || ''); }catch(_){}
+    }, 400);
+  });
+
+  return host;
+}
+
+function openUnitEditor(type){
+  const open = document.querySelector('details.para[open]');
+  const t = open?.querySelector('summary .ptitle');
+  if(!t){ alert('열린 단락을 찾을 수 없습니다.'); return; }
+
+  const key = _unitKeyFromTitleEl(t, type);
+  if(!key){ alert('키 생성 오류: data-book/ch/idx 확인'); return; }
+
+  const host = _ensureUnitEditorHost();
+  const label = type === 'basic' ? '기본이해' : (type === 'structure' ? '내용구조' : '메세지요약');
+
+  host.dataset.key = key;
+  host.querySelector('.ue-title').textContent = `단위 에디터 — ${label}`;
+  host.querySelector('#ueText').value = localStorage.getItem(key) || '';
+  host.style.display = 'flex';
+  host.querySelector('#ueText').focus();
+}
+
 // ===== [FORMAT-PERSIST BACKUP] 내보내기/가져오기 유틸 (WBP3_FMT) BEGIN =====
 // const FMT_NS = typeof FMT_NS === 'string' ? FMT_NS : 'WBP3_FMT'; // 이미 있으면 재사용
 
@@ -422,6 +487,32 @@ function safeBindFmtButtons(){
   catch(e){ console.error('ensureFormatButtons error:', e); }
 }
 // ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 END =====
+
+// ===== [UNIT-EDITOR] ptitle 옆 버튼 주입 =====
+function ensureUnitChips(){
+  const open = document.querySelector('details.para[open]');
+  if(!open) return;
+  const title = open.querySelector('summary .ptitle');
+  if(!title) return;
+
+  let wrap = title.querySelector('.unit-chips');
+  if (!wrap) {
+    wrap = document.createElement('span');
+    wrap.className = 'unit-chips';
+    wrap.innerHTML = `
+      <button type="button" class="unit-chip" data-type="basic">기본이해</button>
+      <button type="button" class="unit-chip" data-type="structure">내용구조</button>
+      <button type="button" class="unit-chip" data-type="summary">메세지요약</button>
+    `;
+    title.appendChild(wrap);
+
+    wrap.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.unit-chip');
+      if (!btn) return;
+      openUnitEditor(btn.dataset.type);
+    });
+  }
+}
 
 const AI_ENDPOINT = 'http://localhost:5174/api/unit-context';
 const el = id => document.getElementById(id);
@@ -2247,11 +2338,18 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
 
   // ===== [FORMAT-PERSIST INIT HOOK] BEGIN =====
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', safeBindFmtButtons);
+    document.addEventListener('DOMContentLoaded', () => {
+      safeBindFmtButtons();
+      ensureUnitChips();          // 👈 여기에 추가
+    });
   } else {
     safeBindFmtButtons();
+    ensureUnitChips();            // 👈 여기에 추가
   }
-  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(safeBindFmtButtons, 0));
+  document.addEventListener('wbp:treeBuilt', ()=> setTimeout(()=>{
+    safeBindFmtButtons();
+    ensureUnitChips();            // 👈 여기에 추가
+  }, 0));
   // ===== [FORMAT-PERSIST INIT HOOK] END =====
 
   if(!bar || !docEl) return;
