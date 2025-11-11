@@ -1,50 +1,50 @@
 /* --------- Utils --------- */
 
-// ===== [UNIT-EDITOR GLOBAL CHIPS] 헤더 우측에 전역 칩스 생성 =====
+// ===== [UNIT-EDITOR GLOBAL CHIPS] 헤더 우측 전역 칩스 생성 (전역 등록) BEGIN =====
 function ensureUnitGlobalChips(){
   const doc = document;
-  // 헤더 찾기 (없으면 body 최상단에 대체 바 생성)
+
+  // 헤더 확보(없으면 대체 헤더 생성)
   let header = doc.querySelector('header');
   if (!header) {
     header = doc.createElement('header');
     header.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--panel,#161922);border-bottom:1px solid var(--border,#252a36);position:sticky;top:0;z-index:1000;';
     doc.body.insertAdjacentElement('afterbegin', header);
   } else {
-    // 헤더에 flex 정렬 보장
     const cs = getComputedStyle(header);
     if (cs.display !== 'flex') header.style.display = 'flex';
     if (!cs.alignItems || cs.alignItems === 'normal') header.style.alignItems = 'center';
     if (!cs.gap || cs.gap === '0px') header.style.gap = '8px';
   }
 
-  // 이미 있으면 중복 생성 방지
+  // 중복 생성 방지
   let bar = doc.getElementById('unitGlobalChips');
-  if (bar) return;
+  if (!bar) {
+    bar = doc.createElement('div');
+    bar.id = 'unitGlobalChips';
+    bar.innerHTML = `
+      <button type="button" class="unit-chip" data-type="basic">기본이해</button>
+      <button type="button" class="unit-chip" data-type="structure">내용구조</button>
+      <button type="button" class="unit-chip" data-type="summary">메세지요약</button>
+    `;
+    header.appendChild(bar);
 
-  bar = doc.createElement('div');
-  bar.id = 'unitGlobalChips';
-  bar.innerHTML = `
-    <button type="button" class="unit-chip" data-type="basic">기본이해</button>
-    <button type="button" class="unit-chip" data-type="structure">내용구조</button>
-    <button type="button" class="unit-chip" data-type="summary">메세지요약</button>
-  `;
-
-  // 헤더의 맨 오른쪽으로 배치: 기존 버튼들(서식저장/회복/초기화 등)보다 우측
-  header.appendChild(bar);
-
-  // 클릭 핸들러 (현재 열린 단락에 단위에디터 연결)
-  bar.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.unit-chip');
-    if (!btn) return;
-    const open = document.querySelector('details.para[open]');
-    if (!open) { alert('열린 단락이 없습니다. 단락을 먼저 여세요.'); return; }
-    // 필요 시 강제로 열기 보장
-    if (!open.hasAttribute('open')) open.setAttribute('open','');
-    openUnitEditor(btn.dataset.type); // 기존 openUnitEditor(type) 재사용
-  });
+    // 클릭: 현재 열린 단락 기준으로 에디터 열기
+    bar.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.unit-chip'); if(!btn) return;
+      const open = document.querySelector('details.para[open]');
+      if(!open){ alert('열린 단락이 없습니다. 단락을 먼저 여세요.'); return; }
+      if(!open.hasAttribute('open')) open.setAttribute('open','');
+      openUnitEditor(btn.dataset.type);
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  }
 }
+// 전역에서 콘솔 호출 가능하도록 노출
+window.ensureUnitGlobalChips = ensureUnitGlobalChips;
+// ===== [UNIT-EDITOR GLOBAL CHIPS] END =====
 
-// ===== [UNIT-EDITOR] 기본이해/내용구조/메세지요약 팝업 & 저장 =====
 const UNIT_NS = 'WBP3_UNIT';
 
 function _unitKeyFromTitleEl(ptitleEl, type){
@@ -2426,15 +2426,15 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       safeBindFmtButtons();
-      ensureUnitGlobalChips();  // 👈 추가: 전역 칩스 생성
+      ensureUnitGlobalChips();     // ← 추가
     });
   } else {
     safeBindFmtButtons();
-    ensureUnitGlobalChips();    // 👈 추가
+    ensureUnitGlobalChips();       // ← 추가
   }
   document.addEventListener('wbp:treeBuilt', ()=> setTimeout(()=>{
     safeBindFmtButtons();
-    ensureUnitGlobalChips();    // 👈 추가 (트리 재구성 시도에도 보장)
+    ensureUnitGlobalChips();       // ← 추가
   }, 0));
   // ===== [FORMAT-PERSIST INIT HOOK] END =====
 
