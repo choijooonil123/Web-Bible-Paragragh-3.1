@@ -101,7 +101,7 @@ function ensureBookChips(){
         <button type="button" class="book-chip" data-type="structure">내용구조</button>
         <button type="button" class="book-chip" data-type="summary">메세지요약</button>
       `;
-      sum.appendChild(chips);
+      sum.insertBefore(chips, sum.firstChild);
 
       // summary 토글로 전파 차단 + 해당 책 컨텍스트로 에디터 열기
       chips.addEventListener('click', (e)=>{
