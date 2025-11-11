@@ -281,6 +281,29 @@
       background: color-mix(in srgb, var(--bg,#0f1115) 85%, #fff 15%);
     }
 
+    /* ===== [BOOK-HEAD CHIPS] 책 1장 첫 단락 '설교' 오른쪽 칩스 ===== */
+.bookhead-chips{
+  display:inline-flex;
+  gap:6px;
+  margin-left:8px;
+  vertical-align:middle;
+}
+.bookhead-chips .bookhead-chip{
+  font:600 11px/1.9 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+  padding:0 10px;
+  border-radius:999px;
+  cursor:pointer;
+  border:1px solid var(--border,#252a36);
+  background: color-mix(in srgb, var(--bg,#0f1115) 92%, #fff 8%);
+  color: color-mix(in srgb, var(--text,#e6e8ef) 28%, var(--bg,#0f1115) 72%);
+  transition: background .15s ease, color .15s ease, border-color .15s ease, opacity .15s ease;
+}
+.bookhead-chips .bookhead-chip:hover{
+  opacity:1;
+  color:var(--text,#e6e8ef);
+  border-color: color-mix(in srgb, var(--border,#252a36) 60%, var(--text,#e6e8ef) 40%);
+  background: color-mix(in srgb, var(--bg,#0f1115) 85%, #fff 15%);
+}
 
   </style>
 
