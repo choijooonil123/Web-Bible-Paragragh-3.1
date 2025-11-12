@@ -305,6 +305,26 @@
   background: color-mix(in srgb, var(--bg,#0f1115) 85%, #fff 15%);
 }
 
+/* ===== book head chips (설교 오른쪽) ===== */
+.ptoolbar .bookhead-chips{
+  display:inline-flex;
+  gap:6px;
+  margin-left:8px;
+  opacity:.9;
+}
+.ptoolbar .bookhead-chips .book-chip{
+  font: inherit;
+  padding: 4px 8px;
+  border: 1px solid var(--border,#252a36);
+  background: var(--panel,#161922);
+  color: var(--text,#e6e8ef);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.ptoolbar .bookhead-chips .book-chip:hover{
+  filter: brightness(1.08);
+}
+
   </style>
 
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Nanum+Myeongjo&display=swap" rel="stylesheet">
@@ -422,6 +442,9 @@
   document.addEventListener('wbp:treeBuilt', ()=>{
     const root = document.getElementById('tree') || document;
     WBP_FMT.restoreAll(root);
+
+    // ✅ 각 책의 1장 첫 단락 '설교' 오른쪽에 칩스 배치
+    ensureBookHeadChips();
   });
 
   // 구형/백업: 트리 내부 DOM 추가 시 새 절 자동 복원
