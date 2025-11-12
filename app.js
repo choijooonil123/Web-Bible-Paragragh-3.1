@@ -2690,13 +2690,13 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
     document.addEventListener('DOMContentLoaded', () => {
       safeBindFmtButtons();
       // ensureBookChips?.();          // (기존에 쓰던 경우 그대로 두세요)
-      ensureGlobalBookChips();      // 👈 추가
+      //ensureGlobalBookChips();      // 👈 추가
       ensureBookHeadChips();       // 👈 마지막에 호출 (정착)
     });
   } else {
     safeBindFmtButtons();
     // ensureBookChips?.();
-    ensureGlobalBookChips();        // 👈 추가
+    //ensureGlobalBookChips();        // 👈 추가
     ensureBookHeadChips();       // 👈 마지막에 호출 (정착)
   }
   document.addEventListener('wbp:treeBuilt', ()=>{
@@ -2854,7 +2854,7 @@ window.inspectCurrentFormat = () => {
     hdr.querySelectorAll(SEL).forEach(el => el.remove());
   });
   mo.observe(hdr, { childList:true, subtree:true });
-})();
+})()
 
 // === [REMOVE HEADER CHIPS - DELAYED] ===
 function removeHeaderBookEditors(){
