@@ -2964,4 +2964,96 @@ if (document.readyState === 'loading') {
   bindBookHeadChipsToFlowEditor();
 }
 
+// === [BOOK-CHIPS → FLOW EDITOR 재사용] =====================================
+function bindBookChipsToFlowEditor(){
+  const tree = document.getElementById('tree');
+  if(!tree) return;
+
+  // 현재 열린 책 수 확인 (2권 이상 열려 있으면 중단)
+  const openedBooks = [...tree.querySelectorAll('details.book[open]')];
+  if (openedBooks.length > 1) {
+    alert('2개 이상 성경이 열려 있습니다. 한 권만 연 다음 다시 시도하세요.');
+    return;
+  }
+
+  // 대상 책: 열려있으면 그 책, 없으면 첫 책
+  const bookEl = openedBooks[0] || tree.querySelector('details.book');
+  if(!bookEl) return;
+
+  // 이 책의 1장/첫 단락에서 '내용흐름' 버튼(편집기 트리거)을 찾음
+  const ch1 = bookEl.querySelector(':scope > .chapters > details') || bookEl.querySelector('details');
+  const p1  = ch1?.querySelector(':scope > .paras > details.para') || ch1?.querySelector('details.para');
+  if(!p1) return;
+
+  const flowBtn =
+    p1.querySelector('.ptoolbar [data-action="flow"]') ||
+    p1.querySelector('.ptoolbar .btn-flow') ||
+    p1.querySelector('.ptoolbar .chip-flow') ||
+    p1.querySelector('.ptoolbar button:contains("내용흐름")'); // 최후 보정(필요시)
+
+  if(!flowBtn) return;
+
+  // 대상 칩(버튼): 각 책 1장 첫 단락 ‘설교’ 오른쪽에 배치된 3개
+  // *프로젝트에 따라 클래스가 다를 수 있으므로 아래 셀렉터 중 존재하는 것만 매칭*
+  const chips = [
+    ...document.querySelectorAll(
+      '.bookhead-chips .chip-basic, .bookhead-chips .chip-structure, .bookhead-chips .chip-summary,' +
+      '.book-chips .chip-basic, .book-chips .chip-structure, .book-chips .chip-summary,' +
+      '.chip-basic, .chip-structure, .chip-summary,' +
+      '.bookhead-chips .book-chip[data-type="basic"], .bookhead-chips .book-chip[data-type="structure"], .bookhead-chips .book-chip[data-type="summary"]'
+    )
+  ];
+
+  chips.forEach(chip=>{
+    if(chip.dataset.flowBind === '1') return; // 중복 바인딩 방지
+    chip.dataset.flowBind = '1';
+
+    chip.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+
+      // 클릭 시점에도 다중 오픈 방지 확인
+      const openBooksNow = [...tree.querySelectorAll('details.book[open]')];
+      if (openBooksNow.length !== 1 && openedBooks.length !== 1) {
+        alert('편집기는 한 권만 열린 상태에서 사용할 수 있습니다.');
+        return;
+      }
+
+      // ‘내용흐름’ 버튼 클릭을 그대로 위임 → 동일한 편집기/스타일 사용
+      flowBtn.click();
+
+      // 편집기 제목을 칩 라벨로 교체 (UI는 내용흐름 편집기를 그대로 사용)
+      requestAnimationFrame(()=>{
+        const dlg =
+          document.querySelector('.flow-editor-modal') ||
+          document.querySelector('.editor-modal') ||
+          document.querySelector('.wbp-editor') ||
+          document.querySelector('.modal');
+
+        const titleEl =
+          dlg?.querySelector('.modal-title') ||
+          dlg?.querySelector('.editor-title') ||
+          dlg?.querySelector('.title');
+
+        if(titleEl){
+          titleEl.textContent = (chip.textContent || '').trim();
+        }
+      });
+    });
+  });
+}
+// ============================================================================
+
+// 렌더 완료 후 1회 바인딩
+document.addEventListener('wbp:treeBuilt', ()=> {
+  bindBookChipsToFlowEditor();
+});
+
+// 초기 로드 시점에도 보정
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bindBookChipsToFlowEditor);
+} else {
+  bindBookChipsToFlowEditor();
+}
+
 })();
