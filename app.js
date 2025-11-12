@@ -727,73 +727,59 @@ function restoreFormatForOpenPara(){
 // ===== [FORMAT-PERSIST] WBP-3.0 절문장 서식 저장/복원 (localStorage, v2 runs) END =====
 
 // ===== [FORMAT-PERSIST UI] 버튼 생성/바인딩 BEGIN =====
+// === [FORMAT-PERSIST UI] 버튼 생성/배치 — 헤더(내용가져오기 옆)로 이동 ===
 function ensureFormatButtons(){
   const doc = document;
 
-  // 1) "서식초기화" 버튼 앵커
+  // 0) 앵커: 헤더의 "내용가져오기" 버튼(기존 id: btnImportAll) 우선 탐색
   let anchor =
-    doc.getElementById('btnFmtReset') ||
-    Array.from(doc.querySelectorAll('button')).find(b => (b.textContent||'').trim().includes('서식초기화'));
+    doc.getElementById('btnImportAll') ||
+    Array.from(doc.querySelectorAll('header button')).find(b => (b.textContent||'').trim().includes('내용가져오기')) ||
+    null;
 
-  // 2) 호스트
+  // 1) 호스트: 헤더 우선
   const headerEl = doc.querySelector('header');
   const host = (anchor && anchor.parentElement) || headerEl || doc.body;
 
-  // 3) 중복 검사
+  // 2) 중복 검사
   const existSave = doc.getElementById('btnFmtSave');
   const existLoad = doc.getElementById('btnFmtLoad');
   const existExp  = doc.getElementById('btnFmtExport');
   const existImp  = doc.getElementById('btnFmtImport');
-  if (existSave && existLoad && existExp && existImp) {
-    if (anchor && existImp.nextElementSibling !== anchor) {
-      // 배치: [저장][회복][내보내기][가져오기][서식초기화]
-      anchor.insertAdjacentElement('beforebegin', existImp);
-      anchor.insertAdjacentElement('beforebegin', existExp);
-      anchor.insertAdjacentElement('beforebegin', existLoad);
-      anchor.insertAdjacentElement('beforebegin', existSave);
-    }
-    return;
-  }
 
-  // 4) 새 버튼 생성
+  // 3) 생성 유틸
   const mkBtn = (id, label) => {
     const b = doc.createElement('button');
-    b.id = id; b.type='button'; b.textContent = label;
-    b.style.marginRight = '6px'; b.className = 'fmt-btn';
+    b.id = id;
+    b.type='button';
+    b.textContent = label;
+    b.className = 'fmt-btn';
+    b.style.marginLeft = '6px';
     return b;
   };
+
   const btnSave = existSave || mkBtn('btnFmtSave','서식저장');
   const btnLoad = existLoad || mkBtn('btnFmtLoad','서식회복');
   const btnExp  = existExp  || mkBtn('btnFmtExport','서식내보내기');
   const btnImp  = existImp  || mkBtn('btnFmtImport','서식가져오기');
 
-  // 5) 삽입: anchor 왼쪽
+  // 4) 배치: "내용가져오기" 버튼의 오른쪽에 순서대로 붙이기
+  //    [내용가져오기] [서식가져오기] [서식내보내기] [서식회복] [서식저장]
   if (anchor) {
-    anchor.insertAdjacentElement('beforebegin', btnImp);
-    anchor.insertAdjacentElement('beforebegin', btnExp);
-    anchor.insertAdjacentElement('beforebegin', btnLoad);
-    anchor.insertAdjacentElement('beforebegin', btnSave);
+    // 이미 있으면 재정렬만
+    anchor.insertAdjacentElement('afterend', btnSave);
+    anchor.insertAdjacentElement('afterend', btnLoad);
+    anchor.insertAdjacentElement('afterend', btnExp);
+    anchor.insertAdjacentElement('afterend', btnImp);
   } else if (host) {
-    host.append(btnSave, btnLoad, btnExp, btnImp);
-  } else {
-    const float = doc.createElement('div');
-    float.style.cssText = 'position:fixed;right:12px;bottom:12px;display:flex;gap:8px;z-index:99999';
-    float.append(btnSave, btnLoad, btnExp, btnImp);
-    doc.body.appendChild(float);
+    host.append(btnImp, btnExp, btnLoad, btnSave);
   }
 
-  // 6) 클릭 이벤트
-  btnSave.addEventListener('click', saveFormatForOpenPara);
-  btnLoad.addEventListener('click', restoreFormatForOpenPara);
-  btnExp.addEventListener('click', wbpExportFormats);
-  btnImp.addEventListener('click', wbpImportFormatsFromFile);
-
-  // (ADD) 서식초기화 버튼에 핸들러 1회 바인딩
-  if (anchor && !anchor.dataset.fmtResetBound) {
-    anchor.addEventListener('click', (e)=>{ e.preventDefault(); clearFormatForOpenPara(); });
-    anchor.dataset.fmtResetBound = '1';
-  }
-
+  // 5) 클릭 이벤트(기존 핸들러 재사용)
+  btnSave.onclick = saveFormatForOpenPara;
+  btnLoad.onclick = restoreFormatForOpenPara;
+  btnExp.onclick  = wbpExportFormats;
+  btnImp.onclick  = wbpImportFormatsFromFile;
 }
 
 function safeBindFmtButtons(){
@@ -2711,14 +2697,13 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
     ensureGlobalBookChips();        // 👈 추가
     ensureBookHeadChips();       // 👈 마지막에 호출 (정착)
   }
-  document.addEventListener('wbp:treeBuilt', () =>
-    setTimeout(() => {
-      safeBindFmtButtons();
-      ensureBookChips?.();
-      ensureGlobalBookChips();      // 👈 추가 (트리 재구성 시도)
-      ensureBookHeadChips();       // 👈 마지막에 호출 (정착)
-    }, 0)
-  );
+  document.addEventListener('wbp:treeBuilt', ()=>{
+    const root = document.getElementById('tree') || document;
+    WBP_FMT.restoreAll(root);       // (기존 유지)
+
+    ensureBookHeadChips();          // ✅ 각 책 1장 첫 단락 '설교' 오른쪽에 3칩 유지
+  });
+
 
   // ===== [INIT HOOK] END =====
 
@@ -2849,5 +2834,13 @@ window.inspectCurrentFormat = () => {
     console.error('⚠️ 저장 데이터 파싱 오류:', e);
   }
 };
+
+(function cleanupMiniChipsOnce(){
+  document.querySelectorAll('.unit-chips, #unitGlobalChips').forEach(el => el.remove());
+  const css = document.createElement('style');
+  css.textContent = `.unit-chips, #unitGlobalChips { display:none !important; }`;
+  document.head.appendChild(css);
+})();
+
 
 })();
