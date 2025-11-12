@@ -2876,4 +2876,92 @@ function removeHeaderBookEditors(){
 }
 removeHeaderBookEditors();
 
+// === [BOOK-CHIP → FLOW-EDITOR 재사용 바인딩] ===============================
+function bindBookHeadChipsToFlowEditor(){
+  const tree = document.getElementById('tree');
+  if(!tree) return;
+
+  // 여러 권이 동시에 open이면 막기
+  const openedBooks = [...tree.querySelectorAll('details.book[open]')];
+  if(openedBooks.length > 1){
+    alert('2개 이상 성경이 열려 있습니다. 한 권만 연 다음 다시 시도하세요.');
+    return;
+  }
+
+  // 대상: 현재 열려있는 책(또는 화면상 첫 책)
+  const bookEl =
+    openedBooks[0] ||
+    tree.querySelector('details.book');
+
+  if(!bookEl) return;
+
+  // 이 책의 1장/첫 단락 툴바에서 '내용흐름' 버튼을 찾아 둔다
+  const ch1 = bookEl.querySelector(':scope > .chapters > details') || bookEl.querySelector('details');
+  const p1  = ch1?.querySelector(':scope > .paras > details.para') || ch1?.querySelector('details.para');
+  if(!p1) return;
+  const flowBtn = p1.querySelector('.ptoolbar [data-action="flow"], .ptoolbar .btn-flow, .ptoolbar .chip-flow');
+  if(!flowBtn) return;
+
+  // 헤더 쪽 3버튼(또는 1장 첫 단락 옆에 추가된 3칩)을 찾아 동일한 편집기 호출로 연결
+  const selectors = [
+    '.chip-basic',      // 기본이해
+    '.chip-structure',  // 내용구조
+    '.chip-summary'     // 메세지요약
+  ];
+  const chips = [
+    ...document.querySelectorAll(selectors.join(','))
+  ];
+
+  chips.forEach(chip=>{
+    // 중복 바인딩 방지
+    if(chip.dataset.wbpBind === 'ok') return;
+    chip.dataset.wbpBind = 'ok';
+
+    chip.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+
+      // 다시 한 번: 다중 오픈 방지
+      const openBooksNow = [...tree.querySelectorAll('details.book[open]')];
+      if(openBooksNow.length !== 1){
+        alert('편집기는 한 권만 열린 상태에서 사용할 수 있습니다.');
+        return;
+      }
+
+      // 내용흐름 버튼의 편집기를 그대로 사용
+      flowBtn.click();
+
+      // 편집기 뜬 뒤, 제목만 해당 칩 텍스트로 교체(동일 UI 유지)
+      // (편집기 DOM 클래스는 프로젝트에 맞춰 아래 후보 중 존재하는 것으로 적용)
+      requestAnimationFrame(()=>{
+        const dlg =
+          document.querySelector('.flow-editor-modal')
+          || document.querySelector('.editor-modal')
+          || document.querySelector('.wbp-editor')
+          || document.querySelector('.modal');
+
+        const titleEl =
+          dlg?.querySelector('.modal-title, .editor-title, .title');
+
+        if(titleEl){
+          titleEl.textContent = chip.textContent.trim();
+        }
+      });
+    });
+  });
+}
+// ===========================================================================
+
+// 초기 바인딩(트리 렌더 이후에 1회)
+document.addEventListener('wbp:treeBuilt', ()=>{
+  bindBookHeadChipsToFlowEditor();
+});
+
+// 초기 로드 직후 한 번 시도(이미 렌더되어 있으면 즉시 연결)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bindBookHeadChipsToFlowEditor);
+} else {
+  bindBookHeadChipsToFlowEditor();
+}
+
 })();
