@@ -1,9 +1,5 @@
 /* --------- Utils --------- */
 
-// ===== [BOOK-HEAD CHIPS] 각 책의 1장 첫 단락 '설교' 오른쪽에 칩스 배치 =====
-// ===== [BOOK-HEAD CHIPS v2] 각 책의 1장 첫 단락 '설교' 오른쪽에 칩스 배치 (견고) =====
-// ===== [BOOK HEAD CHIPS] 각 책의 1장 첫 단락 '설교' 오른쪽에 칩스 주입 =====
-// === [REPLACE] 각 책 1장 첫 단락 '설교' 오른쪽 칩스 → '내용흐름' 편집기 열기 ===
 // ===== [BOOK HEAD CHIPS] 각 책의 1장 첫 단락 '설교' 오른쪽에 칩스 주입 =====
 function ensureBookHeadChips(){
   const doc = document;
@@ -3056,17 +3052,19 @@ if (document.readyState === 'loading') {
   bindBookChipsToFlowEditor();
 }
 
-// === [BOOK-CHIPS → '내용흐름' 편집기 재사용] ===============================
+// === [BOOK-CHIPS → '내용흐름' 편집기 강제 재사용] ==========================
 function bindFlowEditorToBookChips(){
   const tree = document.getElementById('tree');
   if(!tree) return;
 
-  // 열린 책 확인 (2권 이상이면 중단)
+  // 현재 열린 책 수 확인 (2권 이상 열려 있으면 제한)
   const openedBooks = [...tree.querySelectorAll('details.book[open]')];
   if (openedBooks.length > 1) {
     alert('2개 이상 성경이 열려 있습니다. 한 권만 연 다음 다시 시도하세요.');
     return;
   }
+
+  // 열린 책 또는 첫 책
   const bookEl = openedBooks[0] || tree.querySelector('#tree > details.book');
   if(!bookEl) return;
 
@@ -3075,14 +3073,14 @@ function bindFlowEditorToBookChips(){
   const p1  = ch1?.querySelector(':scope > .paras > details.para') || ch1?.querySelector('details.para');
   if(!p1) return;
 
-  // '내용흐름' 버튼(원본 트리거) 찾기
+  // '내용흐름' 원래 버튼(트리거)
   const flowBtn =
     p1.querySelector('.ptoolbar [data-action="flow"]') ||
     p1.querySelector('.ptoolbar .btn-flow') ||
     [...p1.querySelectorAll('.ptoolbar button')].find(b => (b.textContent||'').trim() === '내용흐름');
   if(!flowBtn) return;
 
-  // 설교 버튼 오른쪽에 붙은 3칩(책단위) 선택
+  // 설교 버튼 오른쪽에 있는 3칩(기본이해/내용구조/메세지요약) 컨테이너
   const toolbar = p1.querySelector('.ptoolbar');
   if(!toolbar) return;
   const chipsWrap =
@@ -3090,6 +3088,7 @@ function bindFlowEditorToBookChips(){
     toolbar.querySelector('.book-chips') ||
     toolbar;
 
+  // 칩 셀렉터(여러 구현 호환)
   const sel = [
     '.book-chip[data-type="basic"]',
     '.book-chip[data-type="structure"]',
@@ -3103,7 +3102,7 @@ function bindFlowEditorToBookChips(){
   chips.forEach((chip)=>{
     if (chip.dataset.flowBind === '1') return;
 
-    // 기존 리스너 제거(완전 초기화)
+    // 기존 클릭 리스너 제거(클론 교체)
     const fresh = chip.cloneNode(true);
     chip.replaceWith(fresh);
 
@@ -3119,10 +3118,10 @@ function bindFlowEditorToBookChips(){
         return;
       }
 
-      // '내용흐름' 편집기 그대로 호출
+      // '내용흐름' 편집기를 그대로 호출
       flowBtn.click();
 
-      // 편집기 제목을 칩 라벨로 교체(모양/스타일은 내용흐름 그대로)
+      // 에디터 제목을 칩 라벨로 교체(모양/스타일은 내용흐름 그대로 유지)
       requestAnimationFrame(()=>{
         const dlg =
           document.querySelector('.flow-editor-modal') ||
@@ -3140,9 +3139,9 @@ function bindFlowEditorToBookChips(){
     });
   });
 }
-// ============================================================================
+// ==========================================================================
 
-// 초기/재렌더에 한 번씩 보장
+// 초기/재렌더 훅 연결(중복 호출 허용, 내부에서 자체 가드)
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', bindFlowEditorToBookChips);
 } else {
