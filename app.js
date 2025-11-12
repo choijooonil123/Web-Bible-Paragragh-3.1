@@ -3056,4 +3056,99 @@ if (document.readyState === 'loading') {
   bindBookChipsToFlowEditor();
 }
 
+// === [BOOK-CHIPS → '내용흐름' 편집기 재사용] ===============================
+function bindFlowEditorToBookChips(){
+  const tree = document.getElementById('tree');
+  if(!tree) return;
+
+  // 열린 책 확인 (2권 이상이면 중단)
+  const openedBooks = [...tree.querySelectorAll('details.book[open]')];
+  if (openedBooks.length > 1) {
+    alert('2개 이상 성경이 열려 있습니다. 한 권만 연 다음 다시 시도하세요.');
+    return;
+  }
+  const bookEl = openedBooks[0] || tree.querySelector('#tree > details.book');
+  if(!bookEl) return;
+
+  // 이 책의 1장 / 첫 단락
+  const ch1 = bookEl.querySelector(':scope > .chapters > details') || bookEl.querySelector('details');
+  const p1  = ch1?.querySelector(':scope > .paras > details.para') || ch1?.querySelector('details.para');
+  if(!p1) return;
+
+  // '내용흐름' 버튼(원본 트리거) 찾기
+  const flowBtn =
+    p1.querySelector('.ptoolbar [data-action="flow"]') ||
+    p1.querySelector('.ptoolbar .btn-flow') ||
+    [...p1.querySelectorAll('.ptoolbar button')].find(b => (b.textContent||'').trim() === '내용흐름');
+  if(!flowBtn) return;
+
+  // 설교 버튼 오른쪽에 붙은 3칩(책단위) 선택
+  const toolbar = p1.querySelector('.ptoolbar');
+  if(!toolbar) return;
+  const chipsWrap =
+    toolbar.querySelector('.bookhead-chips') ||
+    toolbar.querySelector('.book-chips') ||
+    toolbar;
+
+  const sel = [
+    '.book-chip[data-type="basic"]',
+    '.book-chip[data-type="structure"]',
+    '.book-chip[data-type="summary"]',
+    '.chip-basic','.chip-structure','.chip-summary'
+  ].join(',');
+
+  const chips = [...chipsWrap.querySelectorAll(sel)];
+  if(!chips.length) return;
+
+  chips.forEach((chip)=>{
+    if (chip.dataset.flowBind === '1') return;
+
+    // 기존 리스너 제거(완전 초기화)
+    const fresh = chip.cloneNode(true);
+    chip.replaceWith(fresh);
+
+    fresh.dataset.flowBind = '1';
+    fresh.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+
+      // 클릭 시점에도 다중 오픈 방지
+      const nowOpen = [...tree.querySelectorAll('details.book[open]')];
+      if (nowOpen.length > 1) {
+        alert('편집기는 한 권만 열린 상태에서 사용할 수 있습니다.');
+        return;
+      }
+
+      // '내용흐름' 편집기 그대로 호출
+      flowBtn.click();
+
+      // 편집기 제목을 칩 라벨로 교체(모양/스타일은 내용흐름 그대로)
+      requestAnimationFrame(()=>{
+        const dlg =
+          document.querySelector('.flow-editor-modal') ||
+          document.querySelector('.editor-modal') ||
+          document.querySelector('.wbp-editor') ||
+          document.querySelector('.modal');
+        const titleEl =
+          dlg?.querySelector('.modal-title') ||
+          dlg?.querySelector('.editor-title') ||
+          dlg?.querySelector('.title');
+        if(titleEl){
+          titleEl.textContent = (fresh.textContent||'').trim();
+        }
+      });
+    });
+  });
+}
+// ============================================================================
+
+// 초기/재렌더에 한 번씩 보장
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bindFlowEditorToBookChips);
+} else {
+  bindFlowEditorToBookChips();
+}
+document.addEventListener('wbp:treeBuilt', bindFlowEditorToBookChips);
+
+
 })();
