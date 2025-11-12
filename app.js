@@ -278,7 +278,7 @@ function ensureBookChips(){
 }
 
 // 전역에서 콘솔로도 호출 가능하게 등록
-window.ensureBookChips = ensureBookChips;
+// window.ensureBookChips = ensureBookChips;
 
 // ===== [UNIT-EDITOR GLOBAL CHIPS] 헤더 우측 전역 칩스 생성 (전역 등록) BEGIN =====
 function ensureUnitGlobalChips(){
@@ -322,7 +322,7 @@ function ensureUnitGlobalChips(){
   }
 }
 // 전역에서 콘솔 호출 가능하도록 노출
-window.ensureUnitGlobalChips = ensureUnitGlobalChips;
+// window.ensureUnitGlobalChips = ensureUnitGlobalChips;
 // ===== [UNIT-EDITOR GLOBAL CHIPS] END =====
 
 const UNIT_NS = 'WBP3_UNIT';
@@ -2687,13 +2687,13 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       safeBindFmtButtons();
-      ensureBookChips?.();          // (기존에 쓰던 경우 그대로 두세요)
+      // ensureBookChips?.();          // (기존에 쓰던 경우 그대로 두세요)
       ensureGlobalBookChips();      // 👈 추가
       ensureBookHeadChips();       // 👈 마지막에 호출 (정착)
     });
   } else {
     safeBindFmtButtons();
-    ensureBookChips?.();
+    // ensureBookChips?.();
     ensureGlobalBookChips();        // 👈 추가
     ensureBookHeadChips();       // 👈 마지막에 호출 (정착)
   }
@@ -2840,6 +2840,18 @@ window.inspectCurrentFormat = () => {
   const css = document.createElement('style');
   css.textContent = `.unit-chips, #unitGlobalChips { display:none !important; }`;
   document.head.appendChild(css);
+})();
+
+// === [REMOVE HEADER CHIPS] 헤더의 '기본이해·내용구조·메세지요약' 제거 ===
+(function removeHeaderChips(){
+  const hdr = document.querySelector('header');
+  if (!hdr) return;
+  const SEL = '.book-chip, .bookhead-chips, .unit-chip, .unit-chips, #unitGlobalChips';
+  hdr.querySelectorAll(SEL).forEach(el => el.remove());
+  const mo = new MutationObserver(() => {
+    hdr.querySelectorAll(SEL).forEach(el => el.remove());
+  });
+  mo.observe(hdr, { childList:true, subtree:true });
 })();
 
 
