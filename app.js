@@ -2856,14 +2856,23 @@ window.inspectCurrentFormat = () => {
   mo.observe(hdr, { childList:true, subtree:true });
 })();
 
-// === [REMOVE HEADER CHIPS] 헤더의 '기본이해/내용구조/메세지요약' 제거 ===
+// === [REMOVE HEADER CHIPS - DELAYED] ===
 function removeHeaderBookEditors(){
-  const header = document.querySelector('header');
-  if (!header) return;
   const labels = ['기본이해','내용구조','메세지요약'];
-  header.querySelectorAll('button, .btn, [role="button"]').forEach(b=>{
-    if (labels.includes((b.textContent||'').trim())) b.remove();
-  });
+  const tryRemove = ()=>{
+    const header = document.querySelector('header');
+    if(!header) return;
+    let removed = 0;
+    header.querySelectorAll('button, .btn, [role="button"]').forEach(b=>{
+      if(labels.includes((b.textContent||'').trim())){
+        b.remove();
+        removed++;
+      }
+    });
+    if(removed>0) console.log('기본이해·내용구조·메세지요약 제거 완료');
+    else setTimeout(tryRemove, 500); // 버튼 생성 지연 대비 반복 시도
+  };
+  tryRemove();
 }
 removeHeaderBookEditors();
 
