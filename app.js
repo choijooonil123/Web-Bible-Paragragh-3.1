@@ -968,6 +968,51 @@ let EDITOR_READER = { playing:false, u:null, synth:window.speechSynthesis||null 
   await setupVoices();
 })();
 
+function ensureBookUnitHeaderButtons(){
+  const doc = document;
+  const header = doc.querySelector('header');
+  if (!header) return;
+
+  // 이미 만들어져 있으면 다시 만들지 않음
+  if (doc.getElementById('btnBookBasic')) return;
+
+  const wrap = doc.createElement('span');
+  wrap.className = 'bookunit-wrap';
+
+  const mk = (id, label) => {
+    const b = doc.createElement('button');
+    b.id = id;
+    b.type = 'button';
+    b.textContent = label;
+    b.className = 'bookunit-btn';
+    return b;
+  };
+
+  const bBasic  = mk('btnBookBasic',  '기본이해');
+  const bStruct = mk('btnBookStruct', '내용구조');
+  const bSum    = mk('btnBookSummary','메세지요약');
+
+  wrap.appendChild(bBasic);
+  wrap.appendChild(bStruct);
+  wrap.appendChild(bSum);
+
+  // "내용가져오기" 옆으로 배치 (id는 환경에 따라 조정)
+  const anchor = doc.getElementById('btnImportAll')
+               || doc.getElementById('btnExportAll')
+               || header.lastElementChild;
+
+  if (anchor && anchor.parentElement === header){
+    header.insertBefore(wrap, anchor.nextSibling);
+  } else {
+    header.appendChild(wrap);
+  }
+
+  // 클릭 시 책 단위 편집기 열기
+  bBasic .addEventListener('click', () => openBookDocEditor('basic'));
+  bStruct.addEventListener('click', () => openBookDocEditor('struct'));
+  bSum   .addEventListener('click', () => openBookDocEditor('summary'));
+}
+
 (function bindButtons(){
   el('btnSaveJSON')?.addEventListener('click', downloadBibleJSON);
   const btnExport = el('btnExportAll');
@@ -979,6 +1024,7 @@ let EDITOR_READER = { playing:false, u:null, synth:window.speechSynthesis||null 
     const f = e.target.files?.[0]; if(!f) return;
     importAllData(f).finally(()=>{ e.target.value=''; });
   });
+  ensureBookUnitHeaderButtons();
 })();
 
 async function tryFetchJSON(path){ const res = await fetch(path, {cache:'no-store'}); if(!res.ok) throw 0; return await res.json(); }
@@ -1607,35 +1653,38 @@ function openSingleDocEditor(kind){
 }
 
 // 🔹 책(성경 한 권) 단위 편집기 (기본이해 / 내용구조 / 메세지요약)
-function openBookDocEditor(kind, bookEl){
-  // 1) 책 엘리먼트 결정
-  let book = bookEl;
-  if (!book) {
-    const opened = document.querySelectorAll('#tree > details.book[open]');
-    if (opened.length !== 1) {
-      alert(opened.length === 0
-        ? '성경(책)을 먼저 하나 여세요.'
-        : '기본이해/내용구조/메세지요약은 한 번에 한 권의 성경만 열어둘 때 작성할 수 있습니다.\n한 권만 남기고 다시 시도하세요.');
-      return;
-    }
-    book = opened[0];
+// ==== [BOOK UNIT EDITOR] 기본이해 / 내용구조 / 메세지요약 ====
+function openBookDocEditor(kind){
+  // 1) 열려 있는 책 확인 (한 권만)
+  const openBooks = document.querySelectorAll('#tree > details.book[open]');
+  if (!openBooks || openBooks.length === 0){
+    alert('성경(책)을 먼저 한 권 여세요.');
+    return;
   }
-
-  // 2) 책 이름 추출
-  const sum = book.querySelector(':scope > summary');
-  const btitleEl = sum?.querySelector('.btitle');
-  const bookName = (btitleEl?.textContent || sum?.textContent || '').trim();
-  if (!bookName) {
-    alert('성경(책) 이름을 찾을 수 없습니다.');
+  if (openBooks.length > 1){
+    alert('한 번에 한 권의 성경만 열어두고 사용해 주세요.');
+    return;
+  }
+  const bookEl = openBooks[0];
+  const sum = bookEl.querySelector(':scope > summary .btitle') 
+           || bookEl.querySelector(':scope > summary');
+  if (!sum){
+    alert('책 제목을 찾지 못했습니다.');
     return;
   }
 
-  // 3) 종류별 레이블 / 저장 키 결정
+  const bookName = (sum.textContent || '').trim();
+  if (!bookName){
+    alert('책 이름을 찾지 못했습니다.');
+    return;
+  }
+
+  // 2) kind → 저장소 선택
   let storageKey, label;
-  if (kind === 'book-basic') {
+  if (kind === 'basic'){
     storageKey = STORAGE_BOOK_BASIC;
     label = '기본이해';
-  } else if (kind === 'book-struct') {
+  } else if (kind === 'struct'){
     storageKey = STORAGE_BOOK_STRUCT;
     label = '내용구조';
   } else {
@@ -1643,38 +1692,41 @@ function openBookDocEditor(kind, bookEl){
     label = '메세지요약';
   }
 
-  // 4) 기존 데이터 불러오기
   const map = getDocMap(storageKey);
   const doc = map[bookName] || {
-    title: `${bookName} ${label}`,
+    title: '',
     body: '',
     images: [],
     date: ''
   };
 
-  // 5) 공용 설교/컨텍스트 편집기 모달 재사용
-  modalRef.textContent = `${bookName} — ${label} (책 단위)`;
-  sermonList.innerHTML = '';
+  // 3) 공용 편집기(내용흐름과 동일한 스타일) 띄우기
+  const modalWrap     = document.getElementById('sermonModal');
+  const modalRef      = document.getElementById('sermonRef');
+  const sermonList    = document.getElementById('sermonList');
+  const sermonEditor  = document.getElementById('sermonEditor');
+  const sermonTitle   = document.getElementById('sermonTitle');
+
+  if (!modalWrap || !modalRef || !sermonList || !sermonEditor || !sermonTitle){
+    alert('편집기 DOM 요소를 찾지 못했습니다.');
+    return;
+  }
+
+  modalRef.textContent = `${bookName} — ${label}`;
+  sermonList.innerHTML = '';              // 목록은 사용 안 함
   sermonEditor.style.display = '';
   sermonEditor.classList.add('context-editor');
-  modalWrap.style.display = 'flex';
-  modalWrap.setAttribute('aria-hidden','false');
-  modalFooterNew.style.display = 'none';
 
+  modalWrap.style.display = 'flex';
+  modalWrap.setAttribute('aria-hidden', 'false');
+
+  // 제목/본문 채우기
   sermonTitle.value = doc.title || '';
   setBodyHTML(doc.body || '');
 
-  // 컨텍스트 타입/책 이름 표시
-  sermonEditor.dataset.editing = '';
-  sermonEditor.dataset.ctxType = kind;     // 'book-basic' / 'book-struct' / 'book-summary'
-  sermonEditor.dataset.bookName = bookName;
-
-  // AI 버튼은 숨김
-  const aiBtn = document.getElementById('aiFill');
-  if (aiBtn) {
-    aiBtn.style.display = 'none';
-    aiBtn.onclick = null;
-  }
+  // 어떤 모드로 저장할지 표시
+  sermonEditor.dataset.ctxType ='book-basic';    // book-basic / book-struct / book-summary
+  sermonEditor.dataset.bookKey = bookName;
 }
 
 /* ✅ 설교목록 렌더링 */
@@ -1839,8 +1891,6 @@ el('saveSermon').onclick = ()=>{
   const now   = new Date();
   const date  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
 
-  const para  = BIBLE.books[CURRENT.book][CURRENT.chap].paras[CURRENT.paraIdx];
-  const pid   = `${CURRENT.book}|${CURRENT.chap}|${para.ref}`;
   const ctxType = sermonEditor.dataset.ctxType || '';
 
   // 🔹 컨텍스트/책/단락 구분 저장
@@ -1853,6 +1903,7 @@ el('saveSermon').onclick = ()=>{
         alert('책 정보를 찾을 수 없습니다. 다시 시도해 주세요.');
         return;
       }
+
       const key = ctxType === 'book-basic'
         ? STORAGE_BOOK_BASIC
         : ctxType === 'book-struct'
@@ -1872,7 +1923,14 @@ el('saveSermon').onclick = ()=>{
       return;
     }
 
-    // 2) 단락 단위 (내용흐름/단위성경속 맥락/전체성경속 맥락/주석) — 기존 로직 유지
+    // 2) 단락 단위 (내용흐름/단위성경속 맥락/전체성경속 맥락/주석) — 기존 로직
+    if (!CURRENT.book || !Number.isFinite(CURRENT.chap) || !Number.isFinite(CURRENT.paraIdx)) {
+      if (!syncCurrentFromOpen()) {
+        alert('단락 정보를 찾을 수 없습니다. 단락을 먼저 여세요.');
+        return;
+      }
+    }
+
     const key = ctxType==='unit'
       ? STORAGE_UNIT_CTX
       : ctxType==='whole'
@@ -1881,10 +1939,10 @@ el('saveSermon').onclick = ()=>{
           ? STORAGE_COMMENTARY
           : STORAGE_SUMMARY;
 
-    const map = getDocMap(key);
     const para = BIBLE.books[CURRENT.book][CURRENT.chap].paras[CURRENT.paraIdx];
-    const pid = `${CURRENT.book}|${CURRENT.chap}|${para.ref}`;
+    const pid  = `${CURRENT.book}|${CURRENT.chap}|${para.ref}`;
 
+    const map = getDocMap(key);
     map[pid] = { title, body, images: imgs, date };
     setDocMap(key, map);
 
@@ -1896,13 +1954,23 @@ el('saveSermon').onclick = ()=>{
     return;
   }
 
+  // 3) 일반 설교 목록 저장 (기존 로직)
   const map = getSermonMap();
   const arr = map[CURRENT.paraId] || [];
   const editing = sermonEditor.dataset.editing;
-  if(editing!==''){ const i=+editing; if(arr[i]) arr[i] = {...arr[i], title, body, images:imgs, date}; }
-  else { arr.unshift({ id: crypto.randomUUID(), title, body, images: imgs, date, link:'' }); }
-  map[CURRENT.paraId] = arr; setSermonMap(map);
-  sermonEditor.style.display = 'none'; renderSermonList(); status('설교가 저장되었습니다.');
+
+  if (editing!==''){
+    const i = +editing;
+    if (arr[i]) arr[i] = {...arr[i], title, body, images:imgs, date};
+  } else {
+    arr.unshift({ id: crypto.randomUUID(), title, body, images: imgs, date, link:'' });
+  }
+
+  map[CURRENT.paraId] = arr;
+  setSermonMap(map);
+  sermonEditor.style.display = 'none';
+  renderSermonList();
+  status('설교가 저장되었습니다.');
 };
 
 /* ===== RTE 유틸 ===== */
