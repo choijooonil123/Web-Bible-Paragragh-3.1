@@ -5,63 +5,86 @@
 // ===== [BOOK HEAD CHIPS] 각 책의 1장 첫 단락 '설교' 오른쪽에 칩스 주입 =====
 // === [REPLACE] 각 책 1장 첫 단락 '설교' 오른쪽 칩스 → '내용흐름' 편집기 열기 ===
 // ===== [BOOK HEAD CHIPS] 각 책의 1장 첫 단락 '설교' 오른쪽에 칩스 주입 =====
+/*
 function ensureBookHeadChips(){
-  const tree = document.getElementById('tree');
-  if (!tree) return;
+  const doc = document;
 
-  const books = tree.querySelectorAll(':scope > details.book');
-  books.forEach(bookEl => {
-    // 각 책의 1장
-    const ch1 = bookEl.querySelector(':scope > .chapters > details');
-    if (!ch1) return;
+  // 1) 책 노드 찾기: #tree 바로 아래 details(책) + 혹시 class="book"인 것도 함께
+  const books = doc.querySelectorAll('#tree > details, details.book');
+  if (!books.length) {
+    console.warn('[bookchips] 책(details) 없음: #tree 구조를 확인하세요.');
+    return;
+  }
 
-    // 1장의 첫 번째 단락
-    const p1 = ch1.querySelector(':scope > .paras > details.para');
-    if (!p1) return;
-
-    // 단락 툴바
-    const tb = p1.querySelector('.ptoolbar');
-    if (!tb) return;
-
-    // 이미 만들어져 있으면 재사용
-    let bar = tb.querySelector('.bookhead-chips');
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.className = 'bookhead-chips';
-      bar.innerHTML = `
-        <button type="button" class="bookhead-chip" data-kind="book-basic">기본이해</button>
-        <button type="button" class="bookhead-chip" data-kind="book-struct">내용구조</button>
-        <button type="button" class="bookhead-chip" data-kind="book-summary">메세지요약</button>
-      `;
-      tb.appendChild(bar);
-    }
-
-    // 이미 바인딩한 경우는 건너뜀
-    if (bar.dataset.bound === '1') return;
-
-    bar.addEventListener('click', (e)=>{
-      const btn = e.target.closest('.bookhead-chip');
-      if (!btn) return;
-      e.preventDefault();
-      e.stopPropagation();
-
-      const opened = document.querySelectorAll('#tree > details.book[open]');
-      if (opened.length !== 1) {
-        alert(opened.length === 0
-          ? '성경(책)을 먼저 하나 여세요.'
-          : '성경은 한 번에 한 권만 열어두고 기본이해/내용구조/메세지요약을 작성하세요.');
+  books.forEach((bookEl, bookIdx) => {
+    try{
+      // 2) 1장 + 첫 단락
+      const ch1 = bookEl.querySelector(':scope > .chapters > details') || bookEl.querySelector('details');
+      if (!ch1) {
+        // 장이 아직 접히거나 lazy-render라면 스킵
+        // console.debug('[bookchips] 챕터 없음', bookIdx);
+        return;
+      }
+      const p1  = ch1.querySelector(':scope > .paras > details.para') || ch1.querySelector('details.para');
+      if (!p1) {
+        // console.debug('[bookchips] 첫 단락 없음', bookIdx);
         return;
       }
 
-      const kind = btn.dataset.kind; // 'book-basic' / 'book-struct' / 'book-summary'
-      openBookDocEditor(kind, opened[0]);
-    });
+      // 3) 툴바 확보 (없으면 보강 생성)
+      let tb = p1.querySelector('.ptoolbar');
+      if (!tb) {
+        // pbody 맨 위에 최소 형태로 생성
+        const body = p1.querySelector('.pbody') || p1;
+        tb = doc.createElement('div');
+        tb.className = 'ptoolbar';
+        body.insertAdjacentElement('afterbegin', tb);
+      }
 
-    bar.dataset.bound = '1';
+      // 4) 설교 버튼 확보 (없으면 보강 생성; 클릭 바인딩은 기존 위임 로직 그대로 활용)
+      let sermBtn = tb.querySelector('.sermBtn');
+      if (!sermBtn) {
+        sermBtn = doc.createElement('button');
+        sermBtn.className = 'sermBtn';
+        sermBtn.textContent = '설교';
+        tb.appendChild(sermBtn);
+      }
+
+      // 5) 기존 칩스 제거(중복 방지)
+      tb.querySelectorAll('.bookhead-chips').forEach(n => n.remove());
+
+      // 6) 칩스 생성 후 '설교' 버튼 오른쪽에 삽입
+      const chips = doc.createElement('span');
+      chips.className = 'bookhead-chips';
+      chips.innerHTML = `
+        <button type="button" class="book-chip" data-type="basic">기본이해</button>
+        <button type="button" class="book-chip" data-type="structure">내용구조</button>
+        <button type="button" class="book-chip" data-type="summary">메세지요약</button>
+      `;
+      sermBtn.insertAdjacentElement('afterend', chips);
+
+      // 7) 클릭 → 책 단위 에디터 열기
+      const bookSummary = bookEl.querySelector(':scope > summary');
+      // chips.addEventListener('click', (e)=>{
+      //   const b = e.target.closest('.book-chip');
+      //   if (!b) return;
+      //   if (typeof openBookEditor === 'function') {
+      //     openBookEditor(b.dataset.type, bookSummary);
+      //   } else {
+      //     alert('openBookEditor가 정의되어 있지 않습니다.');
+      //   }
+      //   e.stopPropagation();
+      //   e.preventDefault();
+      // });
+
+    } catch(err){
+      console.warn('[bookchips] 처리 중 오류:', err);
+    }
   });
 }
 
 window.ensureBookHeadChips = ensureBookHeadChips;
+*/
 
 // ===== [GLOBAL BOOK CHIPS] 헤더의 '서식가져오기' 오른쪽에 전역 칩스 =====
 // ===== [GLOBAL BOOK CHIPS] '서식가져오기' 오른쪽 칩스 주입 =====
@@ -892,18 +915,12 @@ function downloadBibleJSON(){
 }
 
 /* ==== 전체 데이터 백업/복원 ==== */
-const STORAGE_SERMON = 'wbps.sermons.v4';
-const STORAGE_UNIT_CTX = 'wbps.ctx.unit.v1';
-const STORAGE_WHOLE_CTX = 'wbps.ctx.whole.v1';
-const STORAGE_COMMENTARY = 'wbps.ctx.comm.v1';
-const STORAGE_SUMMARY = 'wbps.ctx.summary.v1';
-
-// 👇 책(성경) 단위 기본이해/내용구조/메세지요약 저장용
-const STORAGE_BOOK_BASIC   = 'wbps.book.basic.v1';
-const STORAGE_BOOK_STRUCT  = 'wbps.book.struct.v1';
-const STORAGE_BOOK_SUMMARY = 'wbps.book.summary.v1';
-
-const VOICE_CHOICE_KEY = 'wbps.tts.choice.v2';
+const STORAGE_SERMON      = 'wbps.sermons.v4';
+const STORAGE_UNIT_CTX    = 'wbps.ctx.unit.v1';
+const STORAGE_WHOLE_CTX   = 'wbps.ctx.whole.v1';
+const STORAGE_COMMENTARY  = 'wbps.ctx.comm.v1';
+const STORAGE_SUMMARY     = 'wbps.ctx.summary.v1';
+const VOICE_CHOICE_KEY    = 'wbps.tts.choice.v2';
 
 function todayStr(){
   const d=new Date();
@@ -968,51 +985,6 @@ let EDITOR_READER = { playing:false, u:null, synth:window.speechSynthesis||null 
   await setupVoices();
 })();
 
-function ensureBookUnitHeaderButtons(){
-  const doc = document;
-  const header = doc.querySelector('header');
-  if (!header) return;
-
-  // 이미 만들어져 있으면 다시 만들지 않음
-  if (doc.getElementById('btnBookBasic')) return;
-
-  const wrap = doc.createElement('span');
-  wrap.className = 'bookunit-wrap';
-
-  const mk = (id, label) => {
-    const b = doc.createElement('button');
-    b.id = id;
-    b.type = 'button';
-    b.textContent = label;
-    b.className = 'bookunit-btn';
-    return b;
-  };
-
-  const bBasic  = mk('btnBookBasic',  '기본이해');
-  const bStruct = mk('btnBookStruct', '내용구조');
-  const bSum    = mk('btnBookSummary','메세지요약');
-
-  wrap.appendChild(bBasic);
-  wrap.appendChild(bStruct);
-  wrap.appendChild(bSum);
-
-  // "내용가져오기" 옆으로 배치 (id는 환경에 따라 조정)
-  const anchor = doc.getElementById('btnImportAll')
-               || doc.getElementById('btnExportAll')
-               || header.lastElementChild;
-
-  if (anchor && anchor.parentElement === header){
-    header.insertBefore(wrap, anchor.nextSibling);
-  } else {
-    header.appendChild(wrap);
-  }
-
-  // 클릭 시 책 단위 편집기 열기
-  bBasic .addEventListener('click', () => openBookDocEditor('basic'));
-  bStruct.addEventListener('click', () => openBookDocEditor('struct'));
-  bSum   .addEventListener('click', () => openBookDocEditor('summary'));
-}
-
 (function bindButtons(){
   el('btnSaveJSON')?.addEventListener('click', downloadBibleJSON);
   const btnExport = el('btnExportAll');
@@ -1024,7 +996,6 @@ function ensureBookUnitHeaderButtons(){
     const f = e.target.files?.[0]; if(!f) return;
     importAllData(f).finally(()=>{ e.target.value=''; });
   });
-  ensureBookUnitHeaderButtons();
 })();
 
 async function tryFetchJSON(path){ const res = await fetch(path, {cache:'no-store'}); if(!res.ok) throw 0; return await res.json(); }
@@ -1652,83 +1623,6 @@ function openSingleDocEditor(kind){
   }
 }
 
-// 🔹 책(성경 한 권) 단위 편집기 (기본이해 / 내용구조 / 메세지요약)
-// ==== [BOOK UNIT EDITOR] 기본이해 / 내용구조 / 메세지요약 ====
-function openBookDocEditor(kind){
-  // 1) 열려 있는 책 확인 (한 권만)
-  const openBooks = document.querySelectorAll('#tree > details.book[open]');
-  if (!openBooks || openBooks.length === 0){
-    alert('성경(책)을 먼저 한 권 여세요.');
-    return;
-  }
-  if (openBooks.length > 1){
-    alert('한 번에 한 권의 성경만 열어두고 사용해 주세요.');
-    return;
-  }
-  const bookEl = openBooks[0];
-  const sum = bookEl.querySelector(':scope > summary .btitle') 
-           || bookEl.querySelector(':scope > summary');
-  if (!sum){
-    alert('책 제목을 찾지 못했습니다.');
-    return;
-  }
-
-  const bookName = (sum.textContent || '').trim();
-  if (!bookName){
-    alert('책 이름을 찾지 못했습니다.');
-    return;
-  }
-
-  // 2) kind → 저장소 선택
-  let storageKey, label;
-  if (kind === 'basic'){
-    storageKey = STORAGE_BOOK_BASIC;
-    label = '기본이해';
-  } else if (kind === 'struct'){
-    storageKey = STORAGE_BOOK_STRUCT;
-    label = '내용구조';
-  } else {
-    storageKey = STORAGE_BOOK_SUMMARY;
-    label = '메세지요약';
-  }
-
-  const map = getDocMap(storageKey);
-  const doc = map[bookName] || {
-    title: '',
-    body: '',
-    images: [],
-    date: ''
-  };
-
-  // 3) 공용 편집기(내용흐름과 동일한 스타일) 띄우기
-  const modalWrap     = document.getElementById('sermonModal');
-  const modalRef      = document.getElementById('sermonRef');
-  const sermonList    = document.getElementById('sermonList');
-  const sermonEditor  = document.getElementById('sermonEditor');
-  const sermonTitle   = document.getElementById('sermonTitle');
-
-  if (!modalWrap || !modalRef || !sermonList || !sermonEditor || !sermonTitle){
-    alert('편집기 DOM 요소를 찾지 못했습니다.');
-    return;
-  }
-
-  modalRef.textContent = `${bookName} — ${label}`;
-  sermonList.innerHTML = '';              // 목록은 사용 안 함
-  sermonEditor.style.display = '';
-  sermonEditor.classList.add('context-editor');
-
-  modalWrap.style.display = 'flex';
-  modalWrap.setAttribute('aria-hidden', 'false');
-
-  // 제목/본문 채우기
-  sermonTitle.value = doc.title || '';
-  setBodyHTML(doc.body || '');
-
-  // 어떤 모드로 저장할지 표시
-  sermonEditor.dataset.ctxType ='book-basic';    // book-basic / book-struct / book-summary
-  sermonEditor.dataset.bookKey = bookName;
-}
-
 /* ✅ 설교목록 렌더링 */
 /* ✅ 설교목록 렌더링 (제목 → 날짜 → 링크 → 편집 → 삭제 순서) */
 function renderSermonList(){
@@ -1891,86 +1785,33 @@ el('saveSermon').onclick = ()=>{
   const now   = new Date();
   const date  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
 
+  const para  = BIBLE.books[CURRENT.book][CURRENT.chap].paras[CURRENT.paraIdx];
+  const pid   = `${CURRENT.book}|${CURRENT.chap}|${para.ref}`;
   const ctxType = sermonEditor.dataset.ctxType || '';
 
-  // 🔹 컨텍스트/책/단락 구분 저장
-  if (ctxType) {
-
-    // 1) 책 단위 (기본이해 / 내용구조 / 메세지요약)
-    if (ctxType === 'book-basic' || ctxType === 'book-struct' || ctxType === 'book-summary') {
-      const bookName = sermonEditor.dataset.bookName || '';
-      if (!bookName) {
-        alert('책 정보를 찾을 수 없습니다. 다시 시도해 주세요.');
-        return;
-      }
-
-      const key = ctxType === 'book-basic'
-        ? STORAGE_BOOK_BASIC
-        : ctxType === 'book-struct'
-          ? STORAGE_BOOK_STRUCT
-          : STORAGE_BOOK_SUMMARY;
-
-      const map = getDocMap(key);
-      map[bookName] = { title, body, images: imgs, date };
-      setDocMap(key, map);
-
-      sermonEditor.dataset.ctxType = '';
-      sermonEditor.dataset.bookName = '';
-      sermonEditor.classList.remove('context-editor');
-      modalWrap.style.display = 'none';
-      modalWrap.setAttribute('aria-hidden','true');
-      status(`저장됨: ${bookName} — ${title}`);
-      return;
-    }
-
-    // 2) 단락 단위 (내용흐름/단위성경속 맥락/전체성경속 맥락/주석) — 기존 로직
-    if (!CURRENT.book || !Number.isFinite(CURRENT.chap) || !Number.isFinite(CURRENT.paraIdx)) {
-      if (!syncCurrentFromOpen()) {
-        alert('단락 정보를 찾을 수 없습니다. 단락을 먼저 여세요.');
-        return;
-      }
-    }
-
-    const key = ctxType==='unit'
-      ? STORAGE_UNIT_CTX
-      : ctxType==='whole'
-        ? STORAGE_WHOLE_CTX
-        : ctxType==='commentary'
-          ? STORAGE_COMMENTARY
-          : STORAGE_SUMMARY;
-
-    const para = BIBLE.books[CURRENT.book][CURRENT.chap].paras[CURRENT.paraIdx];
-    const pid  = `${CURRENT.book}|${CURRENT.chap}|${para.ref}`;
-
+  if(ctxType){
+    const key = ctxType==='unit'       ? STORAGE_UNIT_CTX
+              : ctxType==='whole'      ? STORAGE_WHOLE_CTX
+              : ctxType==='commentary' ? STORAGE_COMMENTARY
+              :                          STORAGE_SUMMARY;
     const map = getDocMap(key);
     map[pid] = { title, body, images: imgs, date };
     setDocMap(key, map);
 
     sermonEditor.dataset.ctxType = '';
     sermonEditor.classList.remove('context-editor');
-    modalWrap.style.display = 'none';
-    modalWrap.setAttribute('aria-hidden','true');
+    modalWrap.style.display = 'none'; modalWrap.setAttribute('aria-hidden','true');
     status(`저장됨: ${title}`);
     return;
   }
 
-  // 3) 일반 설교 목록 저장 (기존 로직)
   const map = getSermonMap();
   const arr = map[CURRENT.paraId] || [];
   const editing = sermonEditor.dataset.editing;
-
-  if (editing!==''){
-    const i = +editing;
-    if (arr[i]) arr[i] = {...arr[i], title, body, images:imgs, date};
-  } else {
-    arr.unshift({ id: crypto.randomUUID(), title, body, images: imgs, date, link:'' });
-  }
-
-  map[CURRENT.paraId] = arr;
-  setSermonMap(map);
-  sermonEditor.style.display = 'none';
-  renderSermonList();
-  status('설교가 저장되었습니다.');
+  if(editing!==''){ const i=+editing; if(arr[i]) arr[i] = {...arr[i], title, body, images:imgs, date}; }
+  else { arr.unshift({ id: crypto.randomUUID(), title, body, images: imgs, date, link:'' }); }
+  map[CURRENT.paraId] = arr; setSermonMap(map);
+  sermonEditor.style.display = 'none'; renderSermonList(); status('설교가 저장되었습니다.');
 };
 
 /* ===== RTE 유틸 ===== */
@@ -3270,7 +3111,7 @@ if (document.readyState === 'loading') {
 } else {
   bindBookChipsToFlowEditor();
 }
-
+/*
 // === [BOOK-CHIPS → '내용흐름' 편집기 강제 재사용] ==========================
 function bindFlowEditorToBookChips(){
   const tree = document.getElementById('tree');
@@ -3358,6 +3199,7 @@ function bindFlowEditorToBookChips(){
     });
   });
 }
+*/
 // ==========================================================================
 
 // 초기/재렌더 훅 연결(중복 호출 허용, 내부에서 자체 가드)
@@ -3368,5 +3210,92 @@ if (document.readyState === 'loading') {
 }
 document.addEventListener('wbp:treeBuilt', bindFlowEditorToBookChips);
 
+// === [BOOK-CHIPS DIRECT BIND → 내용흐름 편집기 동일 기능] ================
+function rebindBookChipsToFlowEditor(){
+  const tree = document.getElementById('tree');
+  if(!tree) return;
+
+  // 열린 책 하나만 허용
+  const openedBooks = [...tree.querySelectorAll('details.book[open]')];
+  if(openedBooks.length > 1){
+    alert('2개 이상 성경이 열려 있습니다. 한 권만 연 다음 시도하세요.');
+    return;
+  }
+
+  const bookEl = openedBooks[0] || tree.querySelector('#tree > details.book');
+  if(!bookEl) return;
+
+  // 1장 첫 단락
+  const ch1 = bookEl.querySelector(':scope > .chapters > details') || bookEl.querySelector('details');
+  const p1  = ch1?.querySelector(':scope > .paras > details.para') || ch1?.querySelector('details.para');
+  if(!p1) return;
+
+  // ‘내용흐름’ 버튼 (편집기 원본 트리거)
+  const flowBtn =
+    p1.querySelector('.ptoolbar [data-action="flow"]') ||
+    p1.querySelector('.ptoolbar .btn-flow') ||
+    [...p1.querySelectorAll('.ptoolbar button')].find(b => (b.textContent||'').trim() === '내용흐름');
+  if(!flowBtn) return;
+
+  // 기본이해·내용구조·메세지요약 칩 (여러 형태 대응)
+  const chips = [
+    ...document.querySelectorAll(
+      '.chip-basic, .chip-structure, .chip-summary, ' +
+      '.book-chip[data-type="basic"], .book-chip[data-type="structure"], .book-chip[data-type="summary"]'
+    )
+  ];
+  if(!chips.length) return;
+
+  chips.forEach(chip=>{
+    // 중복 방지
+    if(chip.dataset.flowBound==='1') return;
+    chip.dataset.flowBound='1';
+
+    // 모든 기존 이벤트 제거 후 새로 바인딩
+    const newChip = chip.cloneNode(true);
+    chip.parentNode.replaceChild(newChip, chip);
+
+    newChip.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+
+      const nowOpen = [...tree.querySelectorAll('details.book[open]')];
+      if(nowOpen.length > 1){
+        alert('편집기는 한 권만 열린 상태에서 사용할 수 있습니다.');
+        return;
+      }
+
+      // 내용흐름 편집기 그대로 사용
+      flowBtn.click();
+
+      // 편집기 제목 교체
+      setTimeout(()=>{
+        const dlg =
+          document.querySelector('.flow-editor-modal') ||
+          document.querySelector('.editor-modal') ||
+          document.querySelector('.wbp-editor') ||
+          document.querySelector('.modal');
+        const titleEl =
+          dlg?.querySelector('.modal-title') ||
+          dlg?.querySelector('.editor-title') ||
+          dlg?.querySelector('.title');
+        if(titleEl){
+          titleEl.textContent = newChip.textContent.trim();
+        }
+      },100);
+    });
+  });
+}
+// ==========================================================================
+
+// 렌더 완료 후 1회 연결
+document.addEventListener('wbp:treeBuilt', rebindBookChipsToFlowEditor);
+
+// 초기 DOM 로드 시점에도 실행
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', rebindBookChipsToFlowEditor);
+}else{
+  rebindBookChipsToFlowEditor();
+}
 
 })();
