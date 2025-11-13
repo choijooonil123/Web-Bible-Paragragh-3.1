@@ -1693,14 +1693,23 @@ function renderSermonList(){
     colLink.appendChild(linkInput);
     colLink.appendChild(linkAnchor);
 
-    // 4) 편집 버튼
+    // 4) 편집 버튼 설교목록화면에서 편집버튼 
     const btnEdit = document.createElement('button');
     btnEdit.textContent = '편집';
     btnEdit.addEventListener('click', ()=>{
       modalWrap.style.display = 'none';
-      modalWrap.setAttribute('aria-hidden','true');
+      modalWrap.setAttribute('aria-hidden','true');  // 편집버튼을 누른 후, 나오는 편집기 호출
       openSermonEditorWindow(idx);
     });
+
+    /*
+    const btnEdit = document.createElement('button');
+    btnEdit.textContent = '편집';
+    btnEdit.addEventListener('click', ()=>{ 
+      // 🔹 이제 팝업 편집기가 아니라 "새 설교"와 같은 모달 편집기를 사용
+      openInlineSermonEditor(idx);
+    });
+    */
 
     // 5) 삭제 버튼
     const btnDel = document.createElement('button');
@@ -1769,7 +1778,8 @@ function deleteSermon(idx){
 el('cancelEdit')?.addEventListener('click', ()=>{
   if(sermonEditor.dataset.ctxType){
     sermonEditor.dataset.ctxType = '';
-    modalWrap.style.display = 'none'; modalWrap.setAttribute('aria-hidden','true');
+    modalWrap.style.display = 'none'; 
+    modalWrap.setAttribute('aria-hidden','true');
   }else{
     sermonEditor.style.display = 'none'; renderSermonList();
   }
@@ -1800,7 +1810,8 @@ el('saveSermon').onclick = ()=>{
 
     sermonEditor.dataset.ctxType = '';
     sermonEditor.classList.remove('context-editor');
-    modalWrap.style.display = 'none'; modalWrap.setAttribute('aria-hidden','true');
+    modalWrap.style.display = 'none';
+    modalWrap.setAttribute('aria-hidden','true');
     status(`저장됨: ${title}`);
     return;
   }
@@ -2510,13 +2521,36 @@ function initSermonPopup(win){
   }
 
   // 저장/삭제/닫기/인쇄
-  d.getElementById('s').onclick = ()=>{
-    const html = NblocksToHTML();
-    const title = (d.getElementById('neTitle').value || d.getElementById('t').value || '').trim() || '(제목 없음)';
+  // 20251114 12:48 교체
+    d.getElementById('s').onclick = ()=>{
+    let html = NblocksToHTML();
+
+    // ✅ 1) 내용이 없는 <p>…</p> 빈 줄 제거
+    html = html.replace(/<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>\s*/gi, '');
+
+    // ✅ 2) 줄바꿈 3개 이상 → 2개로 축소
+    html = html.replace(/\n{3,}/g, '\n\n');
+
+    const title =
+        (d.getElementById('neTitle').value || d.getElementById('t').value || '').trim()
+        || '(제목 없음)';
+
     const images = [];
-    w.opener?.postMessage?.({ type:'sermon-save', title, body: html, images }, '*');
+
+    w.opener?.postMessage?.(
+        {
+        type: 'sermon-save',
+        title,
+        body: html,
+        images,
+        },
+        '*'
+    );
+
     w.close();
-  };
+    };
+  // 20251114 12:48 교체
+
   d.getElementById('d').onclick = ()=>{ if(w.confirm('삭제할까요?')){ w.opener?.postMessage?.({ type:'sermon-delete' }, '*'); w.close(); } };
   d.getElementById('x').onclick = ()=> w.close();
   d.getElementById('print').onclick = ()=> w.print();
