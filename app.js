@@ -61,6 +61,40 @@ function ensureBookHeadChips(){
         <button type="button" class="book-chip" data-type="structure">내용구조</button>
         <button type="button" class="book-chip" data-type="summary">메세지요약</button>
       `;
+
+        // ===== 기본이해·내용구조·메세지요약 → 내용흐름 편집기 연결 =====
+        const chipBasic = chips.querySelector('button[data-type="basic"]');
+        const chipStruct = chips.querySelector('button[data-type="structure"]');
+        const chipSummary = chips.querySelector('button[data-type="summary"]');
+
+        // chips가 위치한 단락에서 book/chapter 정보 추출
+        const paraEl = chips.closest('details.para');
+        const summaryEl = paraEl?.querySelector(':scope > summary .ptitle');
+
+        if (summaryEl){
+        const book = summaryEl.dataset.book;
+        const chap = parseInt(summaryEl.dataset.ch, 10);
+        const paraIdx = parseInt(summaryEl.dataset.idx, 10);
+
+        const openBookChipEditor = (ctxType)=>{
+            // 내용흐름 편집기 오픈 (동일 에디터)
+            openUnitContextEditor(book, chap, paraIdx);
+
+            // 책 단위 저장을 위해 context type 지정
+            sermonEditor.dataset.ctxType = ctxType;
+            sermonEditor.dataset.bookName = book;
+        };
+
+        // 기본이해
+        chipBasic.onclick = ()=> openBookChipEditor('book-basic');
+
+        // 내용구조
+        chipStruct.onclick = ()=> openBookChipEditor('book-struct');
+
+        // 메세지요약
+        chipSummary.onclick = ()=> openBookChipEditor('book-summary');
+        }
+
       sermBtn.insertAdjacentElement('afterend', chips);
 
       // 7) 클릭 → 책 단위 에디터 열기
