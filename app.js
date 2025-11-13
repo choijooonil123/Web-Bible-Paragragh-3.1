@@ -1623,7 +1623,34 @@ function openSingleDocEditor(kind){
   }
 }
 
-/* ✅ 설교목록 렌더링 */
+// 🔹 설교 목록에서 선택한 설교를 "새 설교"와 같은 모달 편집기로 여는 함수 20251114 12:14
+function openInlineSermonEditor(idx){
+  const map = getSermonMap();
+  const arr = map[CURRENT.paraId] || [];
+  const it  = arr[idx];
+  if (!it){
+    alert('편집할 설교를 찾을 수 없습니다.');
+    return;
+  }
+
+  // 모달 보이기
+  modalWrap.style.display = 'flex';
+  modalWrap.setAttribute('aria-hidden','false');
+
+  // 리스트 영역은 그대로 두고, 에디터 영역 활성화
+  sermonEditor.style.display = '';
+  sermonEditor.classList.remove('context-editor'); // 일반 설교 모드
+  modalFooterNew.style.display = '';               // 새 설교 버튼 표시(기존 그대로)
+
+  // 내용 채우기
+  sermonTitle.value = it.title || '';
+  setBodyHTML(it.body || '');
+
+  // 현재 편집 중인 인덱스 기록 (저장 시 구분용)
+  sermonEditor.dataset.editing = String(idx);
+  sermonEditor.dataset.ctxType = '';  // 컨텍스트(내용흐름/주석 등 아님)
+}
+
 /* ✅ 설교목록 렌더링 (제목 → 날짜 → 링크 → 편집 → 삭제 순서) */
 function renderSermonList(){
   const map = getSermonMap();
@@ -1693,13 +1720,12 @@ function renderSermonList(){
     colLink.appendChild(linkInput);
     colLink.appendChild(linkAnchor);
 
-    // 4) 편집 버튼
+    // 4) 편집 버튼 20251114 12:16 교체
     const btnEdit = document.createElement('button');
     btnEdit.textContent = '편집';
-    btnEdit.addEventListener('click', ()=>{
-      modalWrap.style.display = 'none';
-      modalWrap.setAttribute('aria-hidden','true');
-      openSermonEditorWindow(idx);
+    btnEdit.addEventListener('click', ()=>{ 
+    // 🔹 이제 팝업 편집기가 아니라 "새 설교"와 같은 모달 편집기를 사용
+    openInlineSermonEditor(idx);
     });
 
     // 5) 삭제 버튼
