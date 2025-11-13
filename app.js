@@ -62,6 +62,7 @@ function ensureBookHeadChips(){
         <button type="button" class="book-chip" data-type="summary">메세지요약</button>
       `;
 
+      // 기본이해, 내용구조, 메세지요약 버튼의 편집기 호출하기 20251114 01:34
         // ===== 기본이해·내용구조·메세지요약 → 내용흐름 편집기 연결 =====
         const chipBasic = chips.querySelector('button[data-type="basic"]');
         const chipStruct = chips.querySelector('button[data-type="structure"]');
@@ -76,6 +77,28 @@ function ensureBookHeadChips(){
         const chap = parseInt(summaryEl.dataset.ch, 10);
         const paraIdx = parseInt(summaryEl.dataset.idx, 10);
 
+        // 📌 내용흐름 편집기와 같은 에디터 호출
+        const openBookChipEditor = (ctxType) => {
+
+            // 🌟 내용흐름 편집기와 동일한 에디터 오픈
+            openSingleDocEditor('unit');
+
+            // 책 단위 저장을 위해 context metadata 선언
+            sermonEditor.dataset.ctxType  = ctxType;   // book-basic / book-struct / book-summary
+            sermonEditor.dataset.bookName = book;      // 저장 시 책이름 사용
+        };
+
+        if (chipBasic)
+            chipBasic.onclick = () => openBookChipEditor('book-basic');
+
+        if (chipStruct)
+            chipStruct.onclick = () => openBookChipEditor('book-struct');
+
+        if (chipSummary)
+            chipSummary.onclick = () => openBookChipEditor('book-summary');
+        }
+
+        /*
         const openBookChipEditor = (ctxType)=>{
             // 내용흐름 편집기 오픈 (동일 에디터)
             openUnitContextEditor(book, chap, paraIdx);
@@ -84,7 +107,7 @@ function ensureBookHeadChips(){
             sermonEditor.dataset.ctxType = ctxType;
             sermonEditor.dataset.bookName = book;
         };
-
+        
         // 기본이해
         chipBasic.onclick = ()=> openBookChipEditor('book-basic');
 
@@ -94,6 +117,8 @@ function ensureBookHeadChips(){
         // 메세지요약
         chipSummary.onclick = ()=> openBookChipEditor('book-summary');
         }
+        */
+
 
       sermBtn.insertAdjacentElement('afterend', chips);
 
