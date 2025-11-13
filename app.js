@@ -1845,6 +1845,7 @@ el('saveSermon').onclick = ()=>{
 
   const ctxType = sermonEditor.dataset.ctxType || '';
 
+
   // 🔹 컨텍스트/책/단락 구분 저장
   if (ctxType) {
 
