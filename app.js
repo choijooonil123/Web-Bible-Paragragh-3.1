@@ -82,8 +82,9 @@ function ensureBookHeadChips(){
     }
   });
 }
-*/
+
 window.ensureBookHeadChips = ensureBookHeadChips;
+*/
 
 // ===== [GLOBAL BOOK CHIPS] 헤더의 '서식가져오기' 오른쪽에 전역 칩스 =====
 // ===== [GLOBAL BOOK CHIPS] '서식가져오기' 오른쪽 칩스 주입 =====
