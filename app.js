@@ -1843,9 +1843,6 @@ el('saveSermon').onclick = ()=>{
   const pid   = `${CURRENT.book}|${CURRENT.chap}|${para.ref}`;
   const ctxType = sermonEditor.dataset.ctxType || '';
 
-  const ctxType = sermonEditor.dataset.ctxType || '';
-
-
   // 🔹 컨텍스트/책/단락 구분 저장
   if (ctxType) {
 
