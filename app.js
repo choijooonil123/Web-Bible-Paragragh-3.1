@@ -57,37 +57,30 @@ function ensureBookHeadChips(){
 
       sermBtn.insertAdjacentElement('afterend', chips);
 
-      // ===== 기본이해·내용구조·메세지요약 → 내용흐름 편집기 연결 =====
-      const chipBasic  = chips.querySelector('button[data-type="basic"]');
-      const chipStruct = chips.querySelector('button[data-type="structure"]');
-      const chipSummary= chips.querySelector('button[data-type="summary"]');
+      // ===== 기본이해·내용구조·메세지요약 → "책 단위" 에디터 연결 =====
+      const chipBasic   = chips.querySelector('button[data-type="basic"]');
+      const chipStruct  = chips.querySelector('button[data-type="structure"]');
+      const chipSummary = chips.querySelector('button[data-type="summary"]');
 
-      // ✅ 이번에는 p1에서 직접 summary/.ptitle 가져오기 (chips.closest 사용 X)
+      // 이 단락의 책 정보만 사용 (chap/paraIdx는 여기선 안 씀)
       const summaryEl = p1.querySelector(':scope > summary .ptitle');
       if (!summaryEl) return;
 
-      const book   = summaryEl.dataset.book;
-      const chap   = parseInt(summaryEl.dataset.ch, 10);
-      const paraIdx= parseInt(summaryEl.dataset.idx, 10);
+      const book = summaryEl.dataset.book;
+      if (!book) return;
 
-      // 📌 내용흐름 편집기와 같은 에디터 호출
-      const openBookChipEditor = (ctxType) => {
-        // 🌟 내용흐름 편집기와 동일한 에디터 열기
-        openSingleDocEditor('unit');   // 기존 단락 컨텍스트 에디터 호출
-
-        // 책 단위 저장용 메타데이터 지정
-        sermonEditor.dataset.ctxType  = ctxType;   // book-basic / book-struct / book-summary
-        sermonEditor.dataset.bookName = book;
+      const openBookChipEditor = (mode) => {
+        openBookDocEditor(mode, book); // 🌟 새로 만든 책 단위 에디터
       };
 
       if (chipBasic)
-        chipBasic.onclick = () => openBookChipEditor('book-basic');
+        chipBasic.onclick = () => openBookChipEditor('basic');
 
       if (chipStruct)
-        chipStruct.onclick = () => openBookChipEditor('book-struct');
+        chipStruct.onclick = () => openBookChipEditor('struct');
 
       if (chipSummary)
-        chipSummary.onclick = () => openBookChipEditor('book-summary');
+        chipSummary.onclick = () => openBookChipEditor('summary');
 
     } catch(err){
       console.warn('[bookchips] 처리 중 오류:', err);
@@ -1753,6 +1746,59 @@ function openSingleDocEditor(kind){
   }
 }
 
+function openBookDocEditor(mode, book){
+  if (!book) {
+    alert('책 정보를 찾을 수 없습니다. 다시 시도해 주세요.');
+    return;
+  }
+
+  const titlePrefix =
+    mode === 'basic'   ? '기본이해' :
+    mode === 'struct'  ? '내용구조' :
+                         '메세지요약';
+
+  const key =
+    mode === 'basic'   ? STORAGE_BOOK_BASIC :
+    mode === 'struct'  ? STORAGE_BOOK_STRUCT :
+                         STORAGE_BOOK_SUMMARY;
+
+  const map = getDocMap(key);
+  const doc = map[book] || {
+    title: '',
+    body:
+      mode === 'basic'
+        ? '이 책의 역사적·배경적·신학적 기본 이해를 정리해 주세요.'
+      : mode === 'struct'
+        ? '이 책의 큰 구조(단락 흐름, 핵심 주제)를 정리해 주세요.'
+        : '이 책의 핵심 메시지와 적용 포인트를 간결하게 요약해 주세요.',
+    images: [],
+    date: ''
+  };
+
+  // 🔹 모달/에디터 UI 세팅 (내용흐름 에디터와 동일한 스타일)
+  modalRef.textContent = `${book} — ${titlePrefix}`;
+  sermonList.innerHTML = '';
+  sermonEditor.style.display = '';
+  sermonEditor.classList.add('context-editor');
+  modalWrap.style.display = 'flex';
+  modalWrap.setAttribute('aria-hidden','false');
+  modalFooterNew.style.display = 'none';
+
+  sermonTitle.value = doc.title || '';
+  setBodyHTML(doc.body || '');
+
+  // 🔹 저장 구분용 메타데이터
+  sermonEditor.dataset.editing = '';
+  sermonEditor.dataset.ctxType  = `book-${mode}`; // book-basic / book-struct / book-summary
+  sermonEditor.dataset.bookName = book;
+
+  // 🔹 AI 버튼은 책 단위에서는 사용 안 함
+  const aiBtn = document.getElementById('aiFill');
+  if (aiBtn) {
+    aiBtn.style.display = 'none';
+    aiBtn.onclick = null;
+  }
+}
 
 /* ✅ 설교목록 렌더링 (제목 → 날짜 → 링크 → 편집 → 삭제 순서) */
 function renderSermonList(){
