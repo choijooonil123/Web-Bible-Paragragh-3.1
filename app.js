@@ -1045,6 +1045,10 @@ const STORAGE_COMMENTARY  = 'wbps.ctx.comm.v1';
 const STORAGE_SUMMARY     = 'wbps.ctx.summary.v1';
 const VOICE_CHOICE_KEY    = 'wbps.tts.choice.v2';
 
+const STORAGE_BOOK_BASIC   = 'WBP3_BOOK_BASIC';
+const STORAGE_BOOK_STRUCT  = 'WBP3_BOOK_STRUCT';
+const STORAGE_BOOK_SUMMARY = 'WBP3_BOOK_SUMMARY';
+
 function todayStr(){
   const d=new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -2968,6 +2972,8 @@ function startInlineTitleEdit(){ /* 필요 시 실제 구현으로 교체 */ }
   document.addEventListener('wbp:treeBuilt', ()=>{
     const root = document.getElementById('tree') || document;
     WBP_FMT.restoreAll(root);       // (기존 유지)
+
+    document.addEventListener('wbp:treeBuilt', ensureBookHeadChips);
 
     // ensureBookHeadChips();          // ✅ 각 책 1장 첫 단락 '설교' 오른쪽에 3칩 유지
   });
