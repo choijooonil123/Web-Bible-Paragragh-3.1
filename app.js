@@ -9,6 +9,98 @@
 function ensureBookHeadChips(){
   const doc = document;
 
+  // 1) 책 노드 찾기
+  const books = doc.querySelectorAll('#tree > details, details.book');
+  if (!books.length) {
+    console.warn('[bookchips] 책(details) 없음: #tree 구조를 확인하세요.');
+    return;
+  }
+
+  books.forEach((bookEl, bookIdx) => {
+    try{
+      // 2) 1장 + 첫 단락
+      const ch1 = bookEl.querySelector(':scope > .chapters > details') || bookEl.querySelector('details');
+      if (!ch1) return;
+
+      const p1  = ch1.querySelector(':scope > .paras > details.para') || ch1.querySelector('details.para');
+      if (!p1) return;
+
+      // 3) 툴바 확보
+      let tb = p1.querySelector('.ptoolbar');
+      if (!tb) {
+        const body = p1.querySelector('.pbody') || p1;
+        tb = doc.createElement('div');
+        tb.className = 'ptoolbar';
+        body.insertAdjacentElement('afterbegin', tb);
+      }
+
+      // 4) 설교 버튼 확보
+      let sermBtn = tb.querySelector('.sermBtn');
+      if (!sermBtn) {
+        sermBtn = doc.createElement('button');
+        sermBtn.className = 'sermBtn';
+        sermBtn.textContent = '설교';
+        tb.appendChild(sermBtn);
+      }
+
+      // 5) 기존 칩스 제거
+      tb.querySelectorAll('.bookhead-chips').forEach(n => n.remove());
+
+      // 6) 칩스 생성 후 설교 오른쪽에 삽입
+      const chips = doc.createElement('span');
+      chips.className = 'bookhead-chips';
+      chips.innerHTML = `
+        <button type="button" class="book-chip" data-type="basic">기본이해</button>
+        <button type="button" class="book-chip" data-type="structure">내용구조</button>
+        <button type="button" class="book-chip" data-type="summary">메세지요약</button>
+      `;
+
+      sermBtn.insertAdjacentElement('afterend', chips);
+
+      // ===== 기본이해·내용구조·메세지요약 → 내용흐름 편집기 연결 =====
+      const chipBasic  = chips.querySelector('button[data-type="basic"]');
+      const chipStruct = chips.querySelector('button[data-type="structure"]');
+      const chipSummary= chips.querySelector('button[data-type="summary"]');
+
+      // ✅ 이번에는 p1에서 직접 summary/.ptitle 가져오기 (chips.closest 사용 X)
+      const summaryEl = p1.querySelector(':scope > summary .ptitle');
+      if (!summaryEl) return;
+
+      const book   = summaryEl.dataset.book;
+      const chap   = parseInt(summaryEl.dataset.ch, 10);
+      const paraIdx= parseInt(summaryEl.dataset.idx, 10);
+
+      // 📌 내용흐름 편집기와 같은 에디터 호출
+      const openBookChipEditor = (ctxType) => {
+        // 🌟 내용흐름 편집기와 동일한 에디터 열기
+        openSingleDocEditor('unit');   // 기존 단락 컨텍스트 에디터 호출
+
+        // 책 단위 저장용 메타데이터 지정
+        sermonEditor.dataset.ctxType  = ctxType;   // book-basic / book-struct / book-summary
+        sermonEditor.dataset.bookName = book;
+      };
+
+      if (chipBasic)
+        chipBasic.onclick = () => openBookChipEditor('book-basic');
+
+      if (chipStruct)
+        chipStruct.onclick = () => openBookChipEditor('book-struct');
+
+      if (chipSummary)
+        chipSummary.onclick = () => openBookChipEditor('book-summary');
+
+    } catch(err){
+      console.warn('[bookchips] 처리 중 오류:', err);
+    }
+  });
+}
+
+window.ensureBookHeadChips = ensureBookHeadChips;
+
+/*
+function ensureBookHeadChips(){
+  const doc = document;
+
   // 1) 책 노드 찾기: #tree 바로 아래 details(책) + 혹시 class="book"인 것도 함께
   const books = doc.querySelectorAll('#tree > details, details.book');
   if (!books.length) {
@@ -81,7 +173,7 @@ function ensureBookHeadChips(){
         const openBookChipEditor = (ctxType) => {
 
             // 🌟 내용흐름 편집기와 동일한 에디터 오픈
-            openSingleDocEditor('unit');
+            openSingleDocEditor('unit'); // 단위성경속 맥락 편집기 호출
 
             // 책 단위 저장을 위해 context metadata 선언
             sermonEditor.dataset.ctxType  = ctxType;   // book-basic / book-struct / book-summary
@@ -97,28 +189,6 @@ function ensureBookHeadChips(){
         if (chipSummary)
             chipSummary.onclick = () => openBookChipEditor('book-summary');
         }
-
-        /*
-        const openBookChipEditor = (ctxType)=>{
-            // 내용흐름 편집기 오픈 (동일 에디터)
-            openUnitContextEditor(book, chap, paraIdx);
-
-            // 책 단위 저장을 위해 context type 지정
-            sermonEditor.dataset.ctxType = ctxType;
-            sermonEditor.dataset.bookName = book;
-        };
-        
-        // 기본이해
-        chipBasic.onclick = ()=> openBookChipEditor('book-basic');
-
-        // 내용구조
-        chipStruct.onclick = ()=> openBookChipEditor('book-struct');
-
-        // 메세지요약
-        chipSummary.onclick = ()=> openBookChipEditor('book-summary');
-        }
-        */
-
 
       sermBtn.insertAdjacentElement('afterend', chips);
 
@@ -143,6 +213,7 @@ function ensureBookHeadChips(){
 }
 
 window.ensureBookHeadChips = ensureBookHeadChips;
+*/
 
 
 // ===== [GLOBAL BOOK CHIPS] 헤더의 '서식가져오기' 오른쪽에 전역 칩스 =====
@@ -1286,10 +1357,10 @@ function buildTree(){
         });
 
         // 컨텍스트 에디터 버튼들
-        body.querySelector('.btnUnitCtx').addEventListener('click', ()=>{ CURRENT.book=bookName; CURRENT.chap=chap; CURRENT.paraIdx=idx; openSingleDocEditor('unit'); });
-        body.querySelector('.btnWholeCtx').addEventListener('click',()=>{ CURRENT.book=bookName; CURRENT.chap=chap; CURRENT.paraIdx=idx; openSingleDocEditor('whole'); });
-        body.querySelector('.btnCommentary').addEventListener('click',()=>{ CURRENT.book=bookName; CURRENT.chap=chap; CURRENT.paraIdx=idx; openSingleDocEditor('commentary'); });
-        body.querySelector('.btnSummary').addEventListener('click',   ()=>{ CURRENT.book=bookName; CURRENT.chap=chap; CURRENT.paraIdx=idx; openSingleDocEditor('summary'); });
+        body.querySelector('.btnUnitCtx').addEventListener('click', ()=>{ CURRENT.book=bookName; CURRENT.chap=chap; CURRENT.paraIdx=idx; openSingleDocEditor('unit'); }); // 단위성경속 편집기 호출
+        body.querySelector('.btnWholeCtx').addEventListener('click',()=>{ CURRENT.book=bookName; CURRENT.chap=chap; CURRENT.paraIdx=idx; openSingleDocEditor('whole'); }); // 전체성경속 편집기 호출
+        body.querySelector('.btnCommentary').addEventListener('click',()=>{ CURRENT.book=bookName; CURRENT.chap=chap; CURRENT.paraIdx=idx; openSingleDocEditor('commentary'); }); // 주석 편집기 호출
+        body.querySelector('.btnSummary').addEventListener('click',   ()=>{ CURRENT.book=bookName; CURRENT.chap=chap; CURRENT.paraIdx=idx; openSingleDocEditor('summary'); }); // 내용흐름 편집기 호출
 
         parWrap.appendChild(detPara);
       });
